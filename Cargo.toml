@@ -1,0 +1,12 @@
+[package]
+name = "wvr-rendering"
+version = "0.1.0"
+authors = ["gurke.club <contact@gurke.club>"]
+edition = "2018"
+
+[dependencies]
+ron = "0.6"
+anyhow = "1.0"
+glium = "0.27"
+wvr-data = {git = "https://github.com/gurkeclub/wvr-data.git"}
+wvr-io = {git = "https://github.com/gurkeclub/wvr-io.git"}
