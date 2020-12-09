@@ -1,7 +1,6 @@
 #[macro_use]
 extern crate glium;
 extern crate wvr_data;
-extern crate wvr_io;
 
 use std::borrow::Cow;
 use std::collections::hash_map::HashMap;
@@ -34,7 +33,7 @@ use glutin::ContextBuilder;
 use wvr_data::config::project_config::{
     FilterConfig, ProjectConfig, RenderStageConfig, SampledInput, ViewConfig,
 };
-use wvr_io::InputProvider;
+use wvr_data::InputProvider;
 
 pub mod filter;
 pub mod stage;
