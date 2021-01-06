@@ -128,6 +128,7 @@ pub struct Filter {
     time: f64,
     beat: f64,
     bpm: f64,
+    frame_count: usize,
     mouse_position: (f64, f64, f64, f64),
 
     vertex_shader: Box<dyn Shader>,
@@ -285,6 +286,7 @@ impl Filter {
             beat: 0.0,
             bpm: 110.0,
             mouse_position: (0.0, 0.0, 0.0, 0.0),
+            frame_count: 0,
 
             vertex_shader,
             fragment_shader,
@@ -312,8 +314,13 @@ impl Filter {
     pub fn set_time(&mut self, time: f64) {
         self.time = time;
     }
+
     pub fn set_beat(&mut self, beat: f64) {
         self.beat = beat;
+    }
+
+    pub fn set_frame_count(&mut self, frame_count: usize) {
+        self.frame_count = frame_count;
     }
 
     pub fn set_resolution(&mut self, resolution: (usize, usize)) {
@@ -407,6 +414,10 @@ impl Filter {
         self.uniform_holder.insert(
             "iBeat".to_owned(),
             (UniformHolder::Float(self.beat as f32), None),
+        );
+        self.uniform_holder.insert(
+            "iFrame".to_owned(),
+            (UniformHolder::Integer(self.frame_count as i32), None),
         );
     }
 

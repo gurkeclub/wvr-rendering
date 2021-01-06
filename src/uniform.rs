@@ -2,9 +2,9 @@ use std::convert::TryFrom;
 
 use anyhow::{Context, Error, Result};
 
-use glium::texture::DepthTexture2d;
 use glium::texture::RawImage2d;
 use glium::texture::SrgbTexture2d;
+use glium::texture::{DepthTexture2d, MipmapsOption};
 use glium::Display;
 
 use wvr_data::DataHolder;
@@ -37,11 +37,15 @@ impl TryFrom<(&Display, &DataHolder)> for UniformHolder {
             DataHolder::Bool(value) => Ok(UniformHolder::Bool(*value)),
             DataHolder::Texture((resolution, texture_data)) => {
                 let image = RawImage2d::from_raw_rgb(texture_data.clone(), *resolution);
-                Ok(UniformHolder::Texture((
-                    SrgbTexture2d::new(display, image)
-                        .context("Failed to build texture from texture data")?,
-                    *resolution,
-                )))
+                let texture =
+                    SrgbTexture2d::with_mipmaps(display, image, MipmapsOption::EmptyMipmaps)
+                        .context("Failed to build texture from texture data")?;
+
+                unsafe {
+                    texture.generate_mipmaps();
+                }
+
+                Ok(UniformHolder::Texture((texture, *resolution)))
             }
             DataHolder::FloatArray(array) => Ok(UniformHolder::Buffer((
                 DepthTexture2d::new(display, vec![array.clone()])

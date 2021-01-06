@@ -271,6 +271,7 @@ impl ShaderView {
             filter.set_time(current_time);
             filter.set_beat(self.beat);
             filter.set_bpm(self.bpm);
+            filter.set_frame_count(self.frame_count);
             filter.set_mouse_position(self.mouse_position);
             filter.set_resolution(self.resolution);
 
