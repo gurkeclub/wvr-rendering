@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::{collections::HashMap, path::MAIN_SEPARATOR};
 
 use anyhow::{Context, Result};
 
@@ -162,6 +162,7 @@ impl Filter {
         let mut vertex_shader = Box::new(ShaderComposer::default());
 
         for shader_file in config.vertex_shader.iter() {
+            let shader_file = shader_file.replace('/', MAIN_SEPARATOR.to_string().as_str());
             let shader_file_path = match shader_file
                 .chars()
                 .next()
@@ -182,6 +183,8 @@ impl Filter {
 
         for shader_file in config.fragment_shader.iter() {
             let mut live_reload = true;
+
+            let shader_file = shader_file.replace('/', MAIN_SEPARATOR.to_string().as_str());
 
             let shader_file_path = match shader_file
                 .chars()
