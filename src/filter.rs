@@ -1,4 +1,5 @@
 use std::convert::TryFrom;
+use std::path::Path;
 use std::{collections::HashMap, path::MAIN_SEPARATOR};
 
 use anyhow::{Context, Result};
@@ -20,7 +21,7 @@ use glium::Program;
 use glium::Surface;
 use glium::VertexBuffer;
 
-use wvr_data::config::project_config::{FilterConfig, ProjectConfig};
+use wvr_data::config::project_config::FilterConfig;
 use wvr_data::shader::Shader;
 use wvr_data::shader::{FileShader, ShaderComposer};
 
@@ -153,7 +154,7 @@ pub struct Filter {
 
 impl Filter {
     pub fn from_config(
-        project_config: &ProjectConfig,
+        project_path: &Path,
         name: &str,
         config: &FilterConfig,
         display: &Display,
@@ -171,9 +172,9 @@ impl Filter {
                 '#' => {
                     let mut shader_file = shader_file.chars();
                     shader_file.next();
-                    project_config.libs_path.join(&shader_file.as_str())
+                    wvr_data::get_libs_path().join(&shader_file.as_str())
                 }
-                _ => project_config.path.join(shader_file),
+                _ => project_path.join(shader_file),
             };
 
             vertex_shader.push(Box::new(FileShader::new(shader_file_path, true)?));
@@ -196,9 +197,9 @@ impl Filter {
 
                     let mut shader_file = shader_file.chars();
                     shader_file.next();
-                    project_config.libs_path.join(shader_file.as_str())
+                    wvr_data::get_libs_path().join(shader_file.as_str())
                 }
-                _ => project_config.path.join(shader_file),
+                _ => project_path.join(shader_file),
             };
 
             fragment_shader.push(Box::new(FileShader::new(shader_file_path, live_reload)?));

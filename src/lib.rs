@@ -6,6 +6,8 @@ use std::borrow::Cow;
 use std::collections::hash_map::HashMap;
 use std::convert::TryFrom;
 use std::fs::File;
+use std::path::Path;
+use std::path::PathBuf;
 use std::time::Instant;
 use std::vec::Vec;
 
@@ -30,9 +32,7 @@ use glutin::dpi::PhysicalSize;
 use glutin::window::WindowBuilder;
 use glutin::ContextBuilder;
 
-use wvr_data::config::project_config::{
-    FilterConfig, ProjectConfig, RenderStageConfig, SampledInput, ViewConfig,
-};
+use wvr_data::config::project_config::{FilterConfig, RenderStageConfig, SampledInput, ViewConfig};
 use wvr_data::InputProvider;
 
 pub mod filter;
@@ -60,6 +60,7 @@ impl Texture2dDataSink<(u8, u8, u8, u8)> for RGBAImageData {
 }
 
 pub struct ShaderView {
+    project_path: PathBuf,
     display: Display,
 
     uniform_holder: HashMap<String, UniformHolder>,
@@ -85,7 +86,7 @@ pub struct ShaderView {
 
 impl ShaderView {
     pub fn new(
-        config: &ProjectConfig,
+        project_path: &Path,
         view_config: &ViewConfig,
         render_chain: &[RenderStageConfig],
         final_stage_config: &RenderStageConfig,
@@ -116,11 +117,11 @@ impl ShaderView {
             window
         } else {
             window
-                .with_min_size(PhysicalSize::new(
+                .with_min_inner_size(PhysicalSize::new(
                     view_config.width as u32,
                     view_config.height as u32,
                 ))
-                .with_max_size(PhysicalSize::new(
+                .with_max_inner_size(PhysicalSize::new(
                     view_config.width as u32,
                     view_config.height as u32,
                 ))
@@ -139,8 +140,13 @@ impl ShaderView {
         let mut render_buffer_list = HashMap::new();
 
         for (filter_name, filter_config) in filters {
-            let filter =
-                Filter::from_config(config, &filter_name, filter_config, &display, resolution)?;
+            let filter = Filter::from_config(
+                project_path,
+                &filter_name,
+                filter_config,
+                &display,
+                resolution,
+            )?;
             filter_list.insert(filter_name.clone(), filter);
         }
 
@@ -182,6 +188,7 @@ impl ShaderView {
                 .context("Failed to build final render stage")?;
 
         Ok(Self {
+            project_path: project_path.to_owned(),
             display,
 
             uniform_holder: HashMap::new(),
@@ -224,7 +231,6 @@ impl ShaderView {
 
     pub fn update(
         &mut self,
-        config: &ProjectConfig,
         uniform_sources: &mut HashMap<String, Box<dyn InputProvider>>,
     ) -> Result<()> {
         let new_update_time = Instant::now();
@@ -266,7 +272,9 @@ impl ShaderView {
             let filter_name = render_stage.get_filter();
             if !self.filter_list.contains_key(filter_name) {
                 println!("{:} || {:}", render_stage.get_name(), filter_name);
-                let config_path = config.filters_path.join(filter_name).join("config.ron");
+                let config_path = wvr_data::get_filters_path()
+                    .join(filter_name)
+                    .join("config.ron");
                 let filter_config: FilterConfig = if let Ok(file) = File::open(&config_path) {
                     ron::de::from_reader::<File, FilterConfig>(file).unwrap()
                 } else {
@@ -274,7 +282,7 @@ impl ShaderView {
                 };
 
                 let filter = Filter::from_config(
-                    config,
+                    &self.project_path,
                     &filter_name,
                     &filter_config,
                     &self.display,
