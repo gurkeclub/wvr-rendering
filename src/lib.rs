@@ -112,6 +112,19 @@ impl ShaderView {
             ))
             .with_resizable(view_config.dynamic)
             .with_fullscreen(fullscreen);
+        let window = if view_config.dynamic {
+            window
+        } else {
+            window
+                .with_min_size(PhysicalSize::new(
+                    view_config.width as u32,
+                    view_config.height as u32,
+                ))
+                .with_max_size(PhysicalSize::new(
+                    view_config.width as u32,
+                    view_config.height as u32,
+                ))
+        };
         let context = ContextBuilder::new()
             .with_vsync(view_config.vsync)
             .with_srgb(true);
