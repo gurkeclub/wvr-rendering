@@ -94,9 +94,13 @@ impl ShaderView {
     ) -> Result<Self> {
         let fullscreen = if view_config.fullscreen {
             let monitor = events_loop.primary_monitor();
-            Some(glium::glutin::window::Fullscreen::Exclusive(
-                monitor.video_modes().next().unwrap(),
-            ))
+            if let Some(monitor) = monitor {
+                Some(glium::glutin::window::Fullscreen::Exclusive(
+                    monitor.video_modes().next().unwrap(),
+                ))
+            } else {
+                None
+            }
         } else {
             None
         };
