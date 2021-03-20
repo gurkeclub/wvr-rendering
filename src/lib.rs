@@ -116,11 +116,11 @@ impl ShaderView {
             window
         } else {
             window
-                .with_min_size(PhysicalSize::new(
+                .with_min_inner_size(PhysicalSize::new(
                     view_config.width as u32,
                     view_config.height as u32,
                 ))
-                .with_max_size(PhysicalSize::new(
+                .with_max_inner_size(PhysicalSize::new(
                     view_config.width as u32,
                     view_config.height as u32,
                 ))
