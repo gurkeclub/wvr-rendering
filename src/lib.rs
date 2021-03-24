@@ -87,6 +87,7 @@ pub struct ShaderView {
 impl ShaderView {
     pub fn new(
         project_path: &Path,
+        bpm: f64,
         view_config: &ViewConfig,
         render_chain: &[RenderStageConfig],
         final_stage_config: &RenderStageConfig,
@@ -197,7 +198,7 @@ impl ShaderView {
             last_update_time: Instant::now(),
 
             resolution,
-            bpm: view_config.bpm as f64,
+            bpm,
             frame_count: 0,
             beat: 0.0,
             mouse_position: (0.0, 0.0),
