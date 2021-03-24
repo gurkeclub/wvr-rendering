@@ -124,11 +124,9 @@ fn parse_error_message(
 }
 
 pub struct Filter {
-    name: String,
     resolution: (usize, usize),
     time: f64,
     beat: f64,
-    bpm: f64,
     frame_count: usize,
     mouse_position: (f64, f64, f64, f64),
 
@@ -154,8 +152,7 @@ pub struct Filter {
 
 impl Filter {
     pub fn from_config(
-        project_path: &Path,
-        name: &str,
+        path_list: &[&Path],
         config: &FilterConfig,
         display: &Display,
         resolution: (usize, usize),
@@ -164,45 +161,46 @@ impl Filter {
 
         for shader_file in config.vertex_shader.iter() {
             let shader_file = shader_file.replace('/', MAIN_SEPARATOR.to_string().as_str());
-            let shader_file_path = match shader_file
-                .chars()
-                .next()
-                .context("Empty shader file path")?
-            {
-                '#' => {
-                    let mut shader_file = shader_file.chars();
-                    shader_file.next();
-                    wvr_data::get_libs_path().join(&shader_file.as_str())
-                }
-                _ => project_path.join(shader_file),
-            };
+            let mut shader_file_path = None;
+            for path_folder in path_list {
+                let shader_file_path_candidate = path_folder.join(&shader_file);
 
-            vertex_shader.push(Box::new(FileShader::new(shader_file_path, true)?));
+                if shader_file_path_candidate.exists() {
+                    shader_file_path = Some(shader_file_path_candidate);
+                    break;
+                }
+            }
+            if shader_file_path.is_none() {
+                return std::result::Result::Err(anyhow::Error::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Can't find source file {:?}", &shader_file),
+                )));
+            }
+
+            vertex_shader.push(Box::new(FileShader::new(shader_file_path.unwrap(), true)?));
         }
 
         let mut fragment_shader = Box::new(ShaderComposer::default());
 
         for shader_file in config.fragment_shader.iter() {
-            let mut live_reload = true;
-
             let shader_file = shader_file.replace('/', MAIN_SEPARATOR.to_string().as_str());
+            let mut shader_file_path = None;
+            for path_folder in path_list {
+                let shader_file_path_candidate = path_folder.join(&shader_file);
 
-            let shader_file_path = match shader_file
-                .chars()
-                .next()
-                .context("Empty shader file path")?
-            {
-                '#' => {
-                    live_reload = false;
-
-                    let mut shader_file = shader_file.chars();
-                    shader_file.next();
-                    wvr_data::get_libs_path().join(shader_file.as_str())
+                if shader_file_path_candidate.exists() {
+                    shader_file_path = Some(shader_file_path_candidate);
+                    break;
                 }
-                _ => project_path.join(shader_file),
-            };
+            }
+            if shader_file_path.is_none() {
+                return std::result::Result::Err(anyhow::Error::new(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Can't find source file {:?}", &shader_file),
+                )));
+            }
 
-            fragment_shader.push(Box::new(FileShader::new(shader_file_path, live_reload)?));
+            fragment_shader.push(Box::new(FileShader::new(shader_file_path.unwrap(), true)?));
         }
 
         let mut uniform_holder = HashMap::new();
@@ -215,7 +213,6 @@ impl Filter {
 
         Self::new(
             display,
-            name,
             resolution,
             vertex_shader,
             fragment_shader,
@@ -226,7 +223,6 @@ impl Filter {
 
     pub fn new(
         display: &Display,
-        name: &str,
         resolution: (usize, usize),
         vertex_shader: Box<dyn Shader>,
         fragment_shader: Box<dyn Shader>,
@@ -284,11 +280,9 @@ impl Filter {
             ),
         };
         Ok(Self {
-            name: name.to_owned(),
             resolution,
             time: 0.0,
             beat: 0.0,
-            bpm: 110.0,
             mouse_position: (0.0, 0.0, 0.0, 0.0),
             frame_count: 0,
 
@@ -305,14 +299,6 @@ impl Filter {
             fragment_text,
             program,
         })
-    }
-
-    pub fn get_name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn set_bpm(&mut self, bpm: f64) {
-        self.bpm = bpm;
     }
 
     pub fn set_time(&mut self, time: f64) {

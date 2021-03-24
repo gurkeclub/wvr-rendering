@@ -5,14 +5,11 @@ extern crate wvr_data;
 use std::borrow::Cow;
 use std::collections::hash_map::HashMap;
 use std::convert::TryFrom;
-use std::fs::File;
-use std::path::Path;
 use std::path::PathBuf;
 use std::time::Instant;
 use std::vec::Vec;
 
 use anyhow::{Context, Result};
-use ron;
 
 use glium::framebuffer::SimpleFrameBuffer;
 use glium::glutin;
@@ -60,7 +57,6 @@ impl Texture2dDataSink<(u8, u8, u8, u8)> for RGBAImageData {
 }
 
 pub struct ShaderView {
-    project_path: PathBuf,
     display: Display,
 
     uniform_holder: HashMap<String, UniformHolder>,
@@ -86,12 +82,11 @@ pub struct ShaderView {
 
 impl ShaderView {
     pub fn new(
-        project_path: &Path,
         bpm: f64,
         view_config: &ViewConfig,
         render_chain: &[RenderStageConfig],
         final_stage_config: &RenderStageConfig,
-        filters: &HashMap<String, FilterConfig>,
+        filters: &HashMap<String, (PathBuf, FilterConfig)>,
         events_loop: &EventLoop<()>,
     ) -> Result<Self> {
         let fullscreen = if view_config.fullscreen {
@@ -140,10 +135,9 @@ impl ShaderView {
         let mut filter_list = HashMap::new();
         let mut render_buffer_list = HashMap::new();
 
-        for (filter_name, filter_config) in filters {
+        for (filter_name, (filter_path, filter_config)) in filters {
             let filter = Filter::from_config(
-                project_path,
-                &filter_name,
+                &[&filter_path.join("src"), &wvr_data::get_libs_path()],
                 filter_config,
                 &display,
                 resolution,
@@ -189,7 +183,6 @@ impl ShaderView {
                 .context("Failed to build final render stage")?;
 
         Ok(Self {
-            project_path: project_path.to_owned(),
             display,
 
             uniform_holder: HashMap::new(),
@@ -269,34 +262,9 @@ impl ShaderView {
             }
         }
 
-        for render_stage in self.view_chain.iter() {
-            let filter_name = render_stage.get_filter();
-            if !self.filter_list.contains_key(filter_name) {
-                println!("{:} || {:}", render_stage.get_name(), filter_name);
-                let config_path = wvr_data::get_filters_path()
-                    .join(filter_name)
-                    .join("config.ron");
-                let filter_config: FilterConfig = if let Ok(file) = File::open(&config_path) {
-                    ron::de::from_reader::<File, FilterConfig>(file).unwrap()
-                } else {
-                    panic!("Could not find filter config file {:?}", config_path);
-                };
-
-                let filter = Filter::from_config(
-                    &self.project_path,
-                    &filter_name,
-                    &filter_config,
-                    &self.display,
-                    self.resolution,
-                )?;
-                self.filter_list.insert(filter_name.clone(), filter);
-            }
-        }
-
         for filter in self.filter_list.values_mut() {
             filter.set_time(current_time);
             filter.set_beat(self.beat);
-            filter.set_bpm(self.bpm);
             filter.set_frame_count(self.frame_count);
             filter.set_mouse_position(self.mouse_position);
             filter.set_resolution(self.resolution);
