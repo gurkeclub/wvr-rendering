@@ -108,7 +108,8 @@ impl ShaderView {
                 view_config.height as u32,
             ))
             .with_resizable(view_config.dynamic)
-            .with_fullscreen(fullscreen);
+            .with_fullscreen(fullscreen)
+            .with_title("wvr");
         let window = if view_config.dynamic {
             window
         } else {
