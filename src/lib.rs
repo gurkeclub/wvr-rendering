@@ -429,4 +429,10 @@ impl ShaderView {
             .context("Could not read blit texture as a pixel buffer")?;
         Ok(texture)
     }
+
+    pub fn stop(&mut self) {
+        for (_, source) in uniform_sources.iter_mut() {
+            source.stop();
+        }
+    }
 }
