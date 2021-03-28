@@ -427,7 +427,7 @@ impl Filter {
     pub fn render(
         &self,
         display: &Display,
-        input_holder: &HashMap<
+        input_uniform_holder: &HashMap<
             &String,
             (
                 &UniformHolder,
@@ -448,40 +448,7 @@ impl Filter {
         let mut uniform_textures_vec = Vec::new();
         let mut uniform_buffers_vec = Vec::new();
 
-        for (uniform_name, (value, sampling)) in &self.uniform_holder {
-            match value {
-                UniformHolder::Buffer((texture, _length)) => {
-                    if let Some((down_sampling, up_sampling)) = sampling {
-                        let texture = texture
-                            .sampled()
-                            .wrap_function(SamplerWrapFunction::BorderClamp)
-                            .minify_filter(*down_sampling)
-                            .magnify_filter(*up_sampling);
-                        uniform_buffers_vec.push((uniform_name, texture));
-                    }
-                }
-                UniformHolder::Texture((texture, _resolution)) => {
-                    if let Some((down_sampling, up_sampling)) = sampling {
-                        let texture = texture
-                            .sampled()
-                            .wrap_function(SamplerWrapFunction::Repeat)
-                            .minify_filter(*down_sampling)
-                            .magnify_filter(*up_sampling);
-                        uniform_textures_vec.push((uniform_name, texture));
-                    }
-                }
-                UniformHolder::Float(value) => uniform_vec.push((uniform_name, value)),
-                UniformHolder::Float2(value) => uniform_vec.push((uniform_name, value)),
-                UniformHolder::Float3(value) => uniform_vec.push((uniform_name, value)),
-                UniformHolder::Float4(value) => uniform_vec.push((uniform_name, value)),
-                UniformHolder::Integer(value) => uniform_vec.push((uniform_name, value)),
-                UniformHolder::Bool(value) => uniform_vec.push((uniform_name, value)),
-
-                UniformHolder::Mat2(value) => uniform_vec.push((uniform_name, value)),
-                UniformHolder::Mat3(value) => uniform_vec.push((uniform_name, value)),
-                UniformHolder::Mat4(value) => uniform_vec.push((uniform_name, value)),
-            }
-        }
+        let mut loaded_uniform_name_list = Vec::new();
 
         for uniform_name in &self.inputs {
             if let Some((texture, Some((down_sampling, up_sampling)))) =
@@ -493,7 +460,8 @@ impl Filter {
                     .minify_filter(*down_sampling)
                     .magnify_filter(*up_sampling);
                 uniform_render_targets_vec.push((uniform_name, texture));
-            } else if let Some((value, sampling)) = input_holder.get(uniform_name) {
+                loaded_uniform_name_list.push(uniform_name.clone());
+            } else if let Some((value, sampling)) = input_uniform_holder.get(uniform_name) {
                 match value {
                     UniformHolder::Buffer((texture, _length)) => {
                         if let Some((down_sampling, up_sampling)) = sampling {
@@ -525,6 +493,89 @@ impl Filter {
                     UniformHolder::Mat3(value) => uniform_vec.push((uniform_name, value)),
                     UniformHolder::Mat4(value) => uniform_vec.push((uniform_name, value)),
                 }
+
+                loaded_uniform_name_list.push(uniform_name.clone());
+            }
+        }
+
+        for uniform_name in self.uniform_holder.keys() {
+            if loaded_uniform_name_list.contains(uniform_name) {
+                continue;
+            }
+
+            if let Some((value, sampling)) = input_uniform_holder.get(uniform_name) {
+                match value {
+                    UniformHolder::Buffer((texture, _length)) => {
+                        if let Some((down_sampling, up_sampling)) = sampling {
+                            let texture = texture
+                                .sampled()
+                                .wrap_function(SamplerWrapFunction::BorderClamp)
+                                .minify_filter(*down_sampling)
+                                .magnify_filter(*up_sampling);
+                            uniform_buffers_vec.push((uniform_name, texture));
+                        }
+                    }
+                    UniformHolder::Texture((texture, _resolution)) => {
+                        if let Some((down_sampling, up_sampling)) = sampling {
+                            let texture = texture
+                                .sampled()
+                                .wrap_function(SamplerWrapFunction::Repeat)
+                                .minify_filter(*down_sampling)
+                                .magnify_filter(*up_sampling);
+                            uniform_textures_vec.push((uniform_name, texture));
+                        }
+                    }
+                    UniformHolder::Float(value) => uniform_vec.push((uniform_name, value)),
+                    UniformHolder::Float2(value) => uniform_vec.push((uniform_name, value)),
+                    UniformHolder::Float3(value) => uniform_vec.push((uniform_name, value)),
+                    UniformHolder::Float4(value) => uniform_vec.push((uniform_name, value)),
+                    UniformHolder::Integer(value) => uniform_vec.push((uniform_name, value)),
+                    UniformHolder::Bool(value) => uniform_vec.push((uniform_name, value)),
+                    UniformHolder::Mat2(value) => uniform_vec.push((uniform_name, value)),
+                    UniformHolder::Mat3(value) => uniform_vec.push((uniform_name, value)),
+                    UniformHolder::Mat4(value) => uniform_vec.push((uniform_name, value)),
+                }
+
+                loaded_uniform_name_list.push(uniform_name.clone());
+            }
+        }
+
+        for (uniform_name, (value, sampling)) in &self.uniform_holder {
+            if loaded_uniform_name_list.contains(uniform_name) {
+                continue;
+            }
+
+            match value {
+                UniformHolder::Buffer((texture, _length)) => {
+                    if let Some((down_sampling, up_sampling)) = sampling {
+                        let texture = texture
+                            .sampled()
+                            .wrap_function(SamplerWrapFunction::BorderClamp)
+                            .minify_filter(*down_sampling)
+                            .magnify_filter(*up_sampling);
+                        uniform_buffers_vec.push((uniform_name, texture));
+                    }
+                }
+                UniformHolder::Texture((texture, _resolution)) => {
+                    if let Some((down_sampling, up_sampling)) = sampling {
+                        let texture = texture
+                            .sampled()
+                            .wrap_function(SamplerWrapFunction::Repeat)
+                            .minify_filter(*down_sampling)
+                            .magnify_filter(*up_sampling);
+                        uniform_textures_vec.push((uniform_name, texture));
+                    }
+                }
+                UniformHolder::Float(value) => uniform_vec.push((uniform_name, value)),
+                UniformHolder::Float2(value) => uniform_vec.push((uniform_name, value)),
+                UniformHolder::Float3(value) => uniform_vec.push((uniform_name, value)),
+                UniformHolder::Float4(value) => uniform_vec.push((uniform_name, value)),
+                UniformHolder::Integer(value) => uniform_vec.push((uniform_name, value)),
+                UniformHolder::Bool(value) => uniform_vec.push((uniform_name, value)),
+
+                UniformHolder::Mat2(value) => uniform_vec.push((uniform_name, value)),
+                UniformHolder::Mat3(value) => uniform_vec.push((uniform_name, value)),
+                UniformHolder::Mat4(value) => uniform_vec.push((uniform_name, value)),
             }
         }
 
