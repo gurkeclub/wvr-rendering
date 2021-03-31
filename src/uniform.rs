@@ -33,6 +33,11 @@ impl TryFrom<(&Display, &DataHolder)> for UniformHolder {
         let (display, uniform) = uniform;
         match uniform {
             DataHolder::Float(value) => Ok(UniformHolder::Float(*value as f32)),
+            DataHolder::Float2(value) => Ok(UniformHolder::Float2((value[0], value[1]))),
+            DataHolder::Float3(value) => Ok(UniformHolder::Float3((value[0], value[1], value[2]))),
+            DataHolder::Float4(value) => Ok(UniformHolder::Float4((
+                value[0], value[1], value[2], value[3],
+            ))),
             DataHolder::Int(value) => Ok(UniformHolder::Integer(*value as i32)),
             DataHolder::Bool(value) => Ok(UniformHolder::Bool(*value)),
             DataHolder::Texture((resolution, texture_data)) => {
