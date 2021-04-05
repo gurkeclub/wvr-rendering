@@ -206,7 +206,7 @@ impl Filter {
         let mut uniform_holder = HashMap::new();
 
         for (variable_name, variable_value) in &config.variables {
-            if let Ok(variable_value) = UniformHolder::try_from((display, variable_value)) {
+            if let Ok(variable_value) = UniformHolder::try_from((display, &variable_value.0)) {
                 uniform_holder.insert(variable_name.clone(), (variable_value, None));
             }
         }
