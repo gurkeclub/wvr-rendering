@@ -21,7 +21,7 @@ use glium::Program;
 use glium::Surface;
 use glium::VertexBuffer;
 
-use wvr_data::config::project_config::FilterConfig;
+use wvr_data::config::project_config::{FilterConfig, FilterMode};
 use wvr_data::shader::Shader;
 use wvr_data::shader::{FileShader, ShaderComposer};
 
@@ -34,6 +34,13 @@ pub struct Vertex {
 }
 
 implement_vertex!(Vertex, position, tex_coords);
+
+#[derive(Copy, Clone)]
+pub struct InstanceAttributes {
+    instance_id: i32,
+}
+
+implement_vertex!(InstanceAttributes, instance_id);
 
 struct CustomUniforms<'hihi> {
     pub primitive_list: Vec<(&'hihi String, &'hihi dyn AsUniformValue)>,
@@ -124,14 +131,26 @@ fn parse_error_message(
 }
 
 pub struct Filter {
+    mode: FilterMode,
+
+    inputs: Vec<String>,
+
+    vertex_shader: Box<dyn Shader>,
+    fragment_shader: Box<dyn Shader>,
+
+    vertex_buffer: VertexBuffer<Vertex>,
+    instance_attribute_buffer: VertexBuffer<InstanceAttributes>,
+    index_buffer: IndexBuffer<u16>,
+
+    vertex_text: String,
+    fragment_text: String,
+    program: Program,
+
     resolution: (usize, usize),
     time: f64,
     beat: f64,
     frame_count: usize,
     mouse_position: (f64, f64, f64, f64),
-
-    vertex_shader: Box<dyn Shader>,
-    fragment_shader: Box<dyn Shader>,
 
     uniform_holder: HashMap<
         String,
@@ -140,14 +159,6 @@ pub struct Filter {
             Option<(MinifySamplerFilter, MagnifySamplerFilter)>,
         ),
     >,
-    inputs: Vec<String>,
-
-    vertex_buffer: VertexBuffer<Vertex>,
-    index_buffer: IndexBuffer<u16>,
-
-    vertex_text: String,
-    fragment_text: String,
-    program: Program,
 }
 
 impl Filter {
@@ -214,6 +225,7 @@ impl Filter {
         Self::new(
             display,
             resolution,
+            config.mode.clone(),
             vertex_shader,
             fragment_shader,
             config.inputs.clone(),
@@ -224,6 +236,7 @@ impl Filter {
     pub fn new(
         display: &Display,
         resolution: (usize, usize),
+        mode: FilterMode,
         vertex_shader: Box<dyn Shader>,
         fragment_shader: Box<dyn Shader>,
         inputs: Vec<String>,
@@ -260,6 +273,20 @@ impl Filter {
             .context("Failed to create vertex buffer")?
         };
 
+        let instance_attribute_buffer = {
+            let data = match mode {
+                FilterMode::Particles(count) => (0..count)
+                    .map(|index| InstanceAttributes {
+                        instance_id: index as i32,
+                    })
+                    .collect::<Vec<_>>(),
+                _ => vec![InstanceAttributes { instance_id: 0 }],
+            };
+
+            glium::vertex::VertexBuffer::dynamic(display, &data)
+                .context("Failed to create instance attributes buffer")?
+        };
+
         // building the index buffer
         let index_buffer =
             IndexBuffer::new(display, PrimitiveType::TriangleStrip, &[1 as u16, 2, 0, 3])
@@ -280,24 +307,28 @@ impl Filter {
             ),
         };
         Ok(Self {
+            mode,
+
+            inputs,
+
+            vertex_shader,
+            fragment_shader,
+
+            vertex_buffer,
+            instance_attribute_buffer,
+            index_buffer,
+
+            vertex_text,
+            fragment_text,
+            program,
+
             resolution,
             time: 0.0,
             beat: 0.0,
             mouse_position: (0.0, 0.0, 0.0, 0.0),
             frame_count: 0,
 
-            vertex_shader,
-            fragment_shader,
-
             uniform_holder,
-            inputs,
-
-            vertex_buffer,
-            index_buffer,
-
-            vertex_text,
-            fragment_text,
-            program,
         })
     }
 
@@ -576,10 +607,14 @@ impl Filter {
         if let Some(framebuffer_texture) = framebuffer_texture {
             let mut framebuffer = SimpleFrameBuffer::new(display, framebuffer_texture)
                 .context("Failed to create target buffer for rendering")?;
-            framebuffer.clear_color(1.0, 0.0, 1.0, 0.0);
+            framebuffer.clear_color(0.0, 0.0, 0.0, 0.0);
+
             framebuffer
                 .draw(
-                    &self.vertex_buffer,
+                    (
+                        &self.vertex_buffer,
+                        self.instance_attribute_buffer.per_instance().unwrap(),
+                    ),
                     &self.index_buffer,
                     &self.program,
                     &uniforms_holder,
@@ -591,7 +626,10 @@ impl Filter {
             target.clear_color(0.0, 0.0, 0.0, 0.0);
             target
                 .draw(
-                    &self.vertex_buffer,
+                    (
+                        &self.vertex_buffer,
+                        self.instance_attribute_buffer.per_instance().unwrap(),
+                    ),
                     &self.index_buffer,
                     &self.program,
                     &uniforms_holder,
