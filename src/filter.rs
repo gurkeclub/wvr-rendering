@@ -604,6 +604,25 @@ impl Filter {
             buffer_list: uniform_buffers_vec,
         };
 
+        let draw_params = if let FilterMode::Particles(_) = self.mode {
+            glium::DrawParameters {
+                blend: glium::Blend {
+                    color: glium::BlendingFunction::Addition {
+                        source: glium::LinearBlendingFactor::One,
+                        destination: glium::LinearBlendingFactor::One,
+                    },
+                    alpha: glium::BlendingFunction::Addition {
+                        source: glium::LinearBlendingFactor::One,
+                        destination: glium::LinearBlendingFactor::One,
+                    },
+                    constant_value: (1.0, 1.0, 1.0, 1.0),
+                },
+                ..Default::default()
+            }
+        } else {
+            Default::default()
+        };
+
         if let Some(framebuffer_texture) = framebuffer_texture {
             let mut framebuffer = SimpleFrameBuffer::new(display, framebuffer_texture)
                 .context("Failed to create target buffer for rendering")?;
@@ -618,7 +637,7 @@ impl Filter {
                     &self.index_buffer,
                     &self.program,
                     &uniforms_holder,
-                    &Default::default(),
+                    &draw_params,
                 )
                 .context("Failed to render filter to framebuffer")?;
         } else {
@@ -633,7 +652,7 @@ impl Filter {
                     &self.index_buffer,
                     &self.program,
                     &uniforms_holder,
-                    &Default::default(),
+                    &draw_params,
                 )
                 .context("Failed to render filter to display")?;
 
