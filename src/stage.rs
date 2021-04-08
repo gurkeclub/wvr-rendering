@@ -6,13 +6,16 @@ use anyhow::Result;
 use glium::texture::UncompressedFloatFormat;
 use glium::Display;
 
-use wvr_data::config::project_config::{BufferPrecision, RenderStageConfig, SampledInput};
+use wvr_data::config::project_config::{
+    BufferPrecision, FilterMode, RenderStageConfig, SampledInput,
+};
 
 use crate::UniformHolder;
 
 pub struct Stage {
     name: String,
     filter: String,
+    filter_mode_params: FilterMode,
     pub input_map: HashMap<String, SampledInput>,
     pub variable_list: HashMap<String, UniformHolder>,
     pub buffer_format: UncompressedFloatFormat,
@@ -35,6 +38,7 @@ impl Stage {
             name,
             buffer_format,
             &config.filter,
+            config.filter_mode_params.clone(),
             config.inputs.clone(),
             variable_list,
         ))
@@ -44,12 +48,14 @@ impl Stage {
         name: &str,
         buffer_format: UncompressedFloatFormat,
         filter: &str,
+        filter_mode_params: FilterMode,
         input_map: HashMap<String, SampledInput>,
         variable_list: HashMap<String, UniformHolder>,
     ) -> Self {
         Self {
             name: name.to_string(),
             filter: filter.to_string(),
+            filter_mode_params,
             input_map,
             variable_list,
             buffer_format,
@@ -62,6 +68,10 @@ impl Stage {
 
     pub fn get_filter(&self) -> &String {
         &self.filter
+    }
+
+    pub fn get_filter_mode_params(&self) -> &FilterMode {
+        &self.filter_mode_params
     }
 
     pub fn get_input_map(&self) -> &HashMap<String, SampledInput> {

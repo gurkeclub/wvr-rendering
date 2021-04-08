@@ -356,6 +356,7 @@ impl ShaderView {
                 &input_holder,
                 &render_buffer_list,
                 framebuffer_texture,
+                stage.get_filter_mode_params(),
             )?;
         }
 

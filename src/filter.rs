@@ -460,7 +460,20 @@ impl Filter {
             ),
         >,
         framebuffer_texture: Option<&Texture2d>,
+        mode_params: &FilterMode,
     ) -> Result<()> {
+        if let (FilterMode::Particles(count), FilterMode::Particles(new_count)) =
+            (&self.mode, mode_params)
+        {
+            if new_count != count {
+                let data = (0..*new_count)
+                    .map(|index| InstanceAttributes {
+                        instance_id: index as i32,
+                    })
+                    .collect::<Vec<_>>();
+                self.instance_attribute_buffer.write(&data);
+            }
+        }
         let mut uniform_vec: Vec<(&String, &dyn AsUniformValue)> = Vec::new();
         let mut uniform_render_targets_vec = Vec::new();
         let mut uniform_textures_vec = Vec::new();
