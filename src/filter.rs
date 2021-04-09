@@ -462,18 +462,28 @@ impl Filter {
         framebuffer_texture: Option<&Texture2d>,
         mode_params: &FilterMode,
     ) -> Result<()> {
-        if let (FilterMode::Particles(count), FilterMode::Particles(new_count)) =
-            (&self.mode, mode_params)
-        {
-            if new_count != count {
-                let data = (0..*new_count)
-                    .map(|index| InstanceAttributes {
-                        instance_id: index as i32,
-                    })
-                    .collect::<Vec<_>>();
-                self.instance_attribute_buffer.write(&data);
-            }
-        }
+        let instance_attribute_buffer = if let FilterMode::Particles(count) = mode_params {
+            let data = (0..*count)
+                .map(|index| InstanceAttributes {
+                    instance_id: index as i32,
+                })
+                .collect::<Vec<_>>();
+            glium::vertex::VertexBuffer::dynamic(display, &data)
+                .context("Failed to create instance attributes buffer")?
+        } else if let FilterMode::Particles(count) = &self.mode {
+            let data = (0..*count)
+                .map(|index| InstanceAttributes {
+                    instance_id: index as i32,
+                })
+                .collect::<Vec<_>>();
+            glium::vertex::VertexBuffer::immutable(display, &data)
+                .context("Failed to create instance attributes buffer")?
+        } else {
+            let data = vec![InstanceAttributes { instance_id: 0 }];
+            glium::vertex::VertexBuffer::immutable(display, &data)
+                .context("Failed to create instance attributes buffer")?
+        };
+
         let mut uniform_vec: Vec<(&String, &dyn AsUniformValue)> = Vec::new();
         let mut uniform_render_targets_vec = Vec::new();
         let mut uniform_textures_vec = Vec::new();
@@ -645,7 +655,7 @@ impl Filter {
                 .draw(
                     (
                         &self.vertex_buffer,
-                        self.instance_attribute_buffer.per_instance().unwrap(),
+                        instance_attribute_buffer.per_instance().unwrap(),
                     ),
                     &self.index_buffer,
                     &self.program,
@@ -660,7 +670,7 @@ impl Filter {
                 .draw(
                     (
                         &self.vertex_buffer,
-                        self.instance_attribute_buffer.per_instance().unwrap(),
+                        instance_attribute_buffer.per_instance().unwrap(),
                     ),
                     &self.index_buffer,
                     &self.program,
