@@ -3,8 +3,8 @@ use std::convert::TryFrom;
 
 use anyhow::Result;
 
+use glium::backend::Facade;
 use glium::texture::UncompressedFloatFormat;
-use glium::Display;
 
 use wvr_data::config::project_config::{
     BufferPrecision, FilterMode, RenderStageConfig, SampledInput,
@@ -22,7 +22,11 @@ pub struct Stage {
 }
 
 impl Stage {
-    pub fn from_config(name: &str, display: &Display, config: &RenderStageConfig) -> Result<Self> {
+    pub fn from_config(
+        name: &str,
+        display: &dyn Facade,
+        config: &RenderStageConfig,
+    ) -> Result<Self> {
         let mut variable_list = HashMap::new();
         for (key, value) in config.variables.iter() {
             variable_list.insert(key.clone(), UniformHolder::try_from((display, value))?);

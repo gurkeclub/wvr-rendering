@@ -12,22 +12,16 @@ use std::vec::Vec;
 use anyhow::{Context, Result};
 
 use glium::framebuffer::SimpleFrameBuffer;
-use glium::glutin;
-use glium::glutin::event_loop::EventLoop;
 use glium::texture::MipmapsOption;
 use glium::texture::SrgbTexture2d;
 use glium::texture::Texture2d;
 use glium::texture::Texture2dDataSink;
 use glium::uniforms::MagnifySamplerFilter;
 use glium::BlitTarget;
-use glium::Display;
+use glium::Frame;
 use glium::Rect;
 use glium::Surface;
 use glium::{backend::Facade, uniforms::MinifySamplerFilter};
-
-use glutin::dpi::PhysicalSize;
-use glutin::window::WindowBuilder;
-use glutin::ContextBuilder;
 
 use wvr_data::config::project_config::{FilterConfig, RenderStageConfig, SampledInput, ViewConfig};
 use wvr_data::InputProvider;
@@ -35,8 +29,9 @@ use wvr_data::InputProvider;
 pub mod filter;
 pub mod stage;
 pub mod uniform;
+pub mod utils;
 
-use filter::Filter;
+use filter::{Filter, RenderTarget};
 use stage::Stage;
 use uniform::UniformHolder;
 
@@ -57,8 +52,6 @@ impl Texture2dDataSink<(u8, u8, u8, u8)> for RGBAImageData {
 }
 
 pub struct ShaderView {
-    display: Display,
-
     uniform_holder: HashMap<String, UniformHolder>,
 
     begin_time: Instant,
@@ -87,49 +80,8 @@ impl ShaderView {
         render_chain: &[RenderStageConfig],
         final_stage_config: &RenderStageConfig,
         filters: &HashMap<String, (PathBuf, FilterConfig)>,
-        events_loop: &EventLoop<()>,
+        display: &dyn Facade,
     ) -> Result<Self> {
-        let fullscreen = if view_config.fullscreen {
-            let monitor = events_loop.primary_monitor();
-            if let Some(monitor) = monitor {
-                Some(glium::glutin::window::Fullscreen::Exclusive(
-                    monitor.video_modes().next().unwrap(),
-                ))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        let window = WindowBuilder::new()
-            .with_inner_size(PhysicalSize::new(
-                view_config.width as u32,
-                view_config.height as u32,
-            ))
-            .with_resizable(view_config.dynamic)
-            .with_fullscreen(fullscreen)
-            .with_title("wvr");
-        let window = if view_config.dynamic {
-            window
-        } else {
-            window
-                .with_min_inner_size(PhysicalSize::new(
-                    view_config.width as u32,
-                    view_config.height as u32,
-                ))
-                .with_max_inner_size(PhysicalSize::new(
-                    view_config.width as u32,
-                    view_config.height as u32,
-                ))
-        };
-        let context = ContextBuilder::new()
-            .with_vsync(view_config.vsync)
-            .with_srgb(true);
-
-        let display = Display::new(window, context, &events_loop)
-            .context("Failed to create the rendering window")?;
-
         let resolution = (view_config.width as usize, view_config.height as usize);
 
         let mut view_chain = Vec::new();
@@ -140,23 +92,22 @@ impl ShaderView {
             let filter = Filter::from_config(
                 &[&filter_path.join("src"), &wvr_data::get_libs_path()],
                 filter_config,
-                &display,
+                display,
                 resolution,
             )?;
             filter_list.insert(filter_name.clone(), filter);
         }
 
         for render_stage_config in render_chain {
-            let stage =
-                Stage::from_config(&render_stage_config.name, &display, render_stage_config)
-                    .context("Failed to build render stage")?;
+            let stage = Stage::from_config(&render_stage_config.name, display, render_stage_config)
+                .context("Failed to build render stage")?;
 
             render_buffer_list.insert(
                 render_stage_config.name.clone(),
                 (
                     vec![
                         Texture2d::empty_with_format(
-                            &display,
+                            display,
                             stage.get_buffer_format(),
                             MipmapsOption::EmptyMipmaps,
                             resolution.0 as u32,
@@ -164,7 +115,7 @@ impl ShaderView {
                         )
                         .context("Failed to create a rendering buffer")?,
                         Texture2d::empty_with_format(
-                            &display,
+                            display,
                             stage.get_buffer_format(),
                             MipmapsOption::EmptyMipmaps,
                             resolution.0 as u32,
@@ -179,13 +130,10 @@ impl ShaderView {
             view_chain.push(stage);
         }
 
-        let final_stage =
-            Stage::from_config(&final_stage_config.name, &display, final_stage_config)
-                .context("Failed to build final render stage")?;
+        let final_stage = Stage::from_config(&final_stage_config.name, display, final_stage_config)
+            .context("Failed to build final render stage")?;
 
         Ok(Self {
-            display,
-
             uniform_holder: HashMap::new(),
 
             begin_time: Instant::now(),
@@ -208,9 +156,6 @@ impl ShaderView {
             final_stage,
         })
     }
-    pub fn get_display(&self) -> &Display {
-        &self.display
-    }
 
     pub fn get_frame_count(&self) -> usize {
         self.frame_count
@@ -226,6 +171,7 @@ impl ShaderView {
 
     pub fn update(
         &mut self,
+        display: &dyn Facade,
         uniform_sources: &mut HashMap<String, Box<dyn InputProvider>>,
     ) -> Result<()> {
         let new_update_time = Instant::now();
@@ -243,20 +189,13 @@ impl ShaderView {
             self.begin_time.elapsed().as_secs_f64()
         };
 
-        let new_resolution = self.display.get_framebuffer_dimensions();
-        let new_resolution = (new_resolution.0 as usize, new_resolution.1 as usize);
-
-        if new_resolution != self.resolution && self.dynamic {
-            self.set_resolution(new_resolution)?;
-        }
-
         for (_input_name, source) in uniform_sources.iter_mut() {
             source.set_beat(self.beat, self.locked_speed);
             source.set_time(current_time, self.locked_speed);
 
             for ref source_id in source.provides() {
                 if let Some(ref value) = source.get(&source_id, true) {
-                    if let Ok(value) = UniformHolder::try_from((&self.display, value)) {
+                    if let Ok(value) = UniformHolder::try_from((display as &dyn Facade, value)) {
                         self.uniform_holder.insert(source_id.to_owned(), value);
                     }
                 }
@@ -270,7 +209,7 @@ impl ShaderView {
             filter.set_mouse_position(self.mouse_position);
             filter.set_resolution(self.resolution);
 
-            filter.update(&self.display);
+            filter.update(display);
         }
 
         self.last_update_time = new_update_time;
@@ -278,12 +217,12 @@ impl ShaderView {
         Ok(())
     }
 
-    pub fn render(&mut self) -> Result<()> {
+    pub fn render(&mut self, display: &dyn Facade, window_frame: &mut Frame) -> Result<()> {
         for stage in self.view_chain.iter() {
             if let Some((render_target_pack, _)) = self.render_buffer_list.get(stage.get_name()) {
                 let render_target = &render_target_pack[1];
 
-                self.render_stage(stage, Some(render_target))?;
+                self.render_stage(display, stage, RenderTarget::FrameBuffer(render_target))?;
             }
 
             if let Some((ref mut render_target_pack, _)) =
@@ -298,7 +237,11 @@ impl ShaderView {
             }
         }
 
-        self.render_stage(&self.final_stage, None)?;
+        self.render_stage(
+            display,
+            &self.final_stage,
+            RenderTarget::Window(window_frame),
+        )?;
 
         self.frame_count += 1;
 
@@ -307,8 +250,9 @@ impl ShaderView {
 
     pub fn render_stage(
         &self,
+        display: &dyn Facade,
         stage: &Stage,
-        framebuffer_texture: Option<&Texture2d>,
+        target: RenderTarget,
     ) -> Result<()> {
         let mut render_buffer_list = HashMap::new();
         let mut input_holder = HashMap::new();
@@ -352,10 +296,10 @@ impl ShaderView {
         let filter_name = stage.get_filter();
         if let Some(filter) = self.filter_list.get(filter_name) {
             filter.render(
-                &self.display,
+                display,
                 &input_holder,
                 &render_buffer_list,
-                framebuffer_texture,
+                target,
                 stage.get_filter_mode_params(),
             )?;
         }
@@ -363,7 +307,15 @@ impl ShaderView {
         Ok(())
     }
 
-    pub fn set_resolution(&mut self, resolution: (usize, usize)) -> Result<()> {
+    pub fn set_resolution(
+        &mut self,
+        display: &dyn Facade,
+        resolution: (usize, usize),
+    ) -> Result<()> {
+        if resolution == self.resolution || !self.dynamic {
+            return Ok(());
+        }
+
         self.resolution = resolution;
         self.render_buffer_list.clear();
 
@@ -371,7 +323,7 @@ impl ShaderView {
             let new_render_buffer_pair = (
                 vec![
                     Texture2d::empty_with_format(
-                        &self.display,
+                        display,
                         stage.get_buffer_format(),
                         MipmapsOption::EmptyMipmaps,
                         self.resolution.0 as u32,
@@ -379,7 +331,7 @@ impl ShaderView {
                     )
                     .context("Failed to create a rendering buffer")?,
                     Texture2d::empty_with_format(
-                        &self.display,
+                        display,
                         stage.get_buffer_format(),
                         MipmapsOption::EmptyMipmaps,
                         self.resolution.0 as u32,
@@ -396,13 +348,9 @@ impl ShaderView {
         Ok(())
     }
 
-    pub fn request_redraw(&mut self) {
-        self.display.gl_window().window().request_redraw();
-    }
-
-    pub fn take_screenshot(&self) -> Result<RGBAImageData> {
+    pub fn take_screenshot(&self, display: &dyn Facade) -> Result<RGBAImageData> {
         // Get information about current framebuffer
-        let dimensions = self.display.get_context().get_framebuffer_dimensions();
+        let dimensions = display.get_context().get_framebuffer_dimensions();
         let rect = Rect {
             left: 0,
             bottom: 0,
@@ -417,9 +365,9 @@ impl ShaderView {
         };
 
         // Create temporary texture and blit the front buffer to it
-        let texture = SrgbTexture2d::empty(&self.display, dimensions.0, dimensions.1)
+        let texture = SrgbTexture2d::empty(display, dimensions.0, dimensions.1)
             .context("Could not create empty texture for screenshot")?;
-        let framebuffer = SimpleFrameBuffer::new(&self.display, &texture)
+        let framebuffer = SimpleFrameBuffer::new(display, &texture)
             .context("Could not create frame buffer for screenshot bliting")?;
         framebuffer.blit_from_frame(&rect, &blit_target, MagnifySamplerFilter::Nearest);
 

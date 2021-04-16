@@ -2,10 +2,10 @@ use std::convert::TryFrom;
 
 use anyhow::{Context, Error, Result};
 
+use glium::backend::Facade;
 use glium::texture::RawImage2d;
 use glium::texture::SrgbTexture2d;
 use glium::texture::{DepthTexture2d, MipmapsOption};
-use glium::Display;
 
 use wvr_data::DataHolder;
 
@@ -26,10 +26,10 @@ pub enum UniformHolder {
     Mat4([[f32; 4]; 4]),
 }
 
-impl TryFrom<(&Display, &DataHolder)> for UniformHolder {
+impl TryFrom<(&dyn Facade, &DataHolder)> for UniformHolder {
     type Error = Error;
 
-    fn try_from(uniform: (&Display, &DataHolder)) -> Result<UniformHolder> {
+    fn try_from(uniform: (&dyn Facade, &DataHolder)) -> Result<UniformHolder> {
         let (display, uniform) = uniform;
         match uniform {
             DataHolder::Float(value) => Ok(UniformHolder::Float(*value as f32)),

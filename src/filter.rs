@@ -4,6 +4,7 @@ use std::{collections::HashMap, path::MAIN_SEPARATOR};
 
 use anyhow::{Context, Result};
 
+use glium::backend::Facade;
 use glium::framebuffer::SimpleFrameBuffer;
 use glium::index::PrimitiveType;
 use glium::program::ProgramChooserCreationError;
@@ -15,7 +16,7 @@ use glium::texture::SrgbTexture2d;
 use glium::uniforms::{AsUniformValue, UniformValue, Uniforms};
 use glium::uniforms::{MagnifySamplerFilter, MinifySamplerFilter};
 use glium::uniforms::{Sampler, SamplerWrapFunction};
-use glium::Display;
+use glium::Frame;
 use glium::IndexBuffer;
 use glium::Program;
 use glium::Surface;
@@ -26,6 +27,11 @@ use wvr_data::shader::Shader;
 use wvr_data::shader::{FileShader, ShaderComposer};
 
 use crate::uniform::UniformHolder;
+
+pub enum RenderTarget<'a> {
+    FrameBuffer(&'a Texture2d),
+    Window(&'a mut Frame),
+}
 
 #[derive(Copy, Clone)]
 pub struct Vertex {
@@ -80,7 +86,7 @@ fn parse_error_message(
             match e {
                 ProgramCreationError::CompilationError(message, shader_type) => {
                     let mut message_parts = message.split(':');
-                    if let Some(_) = message_parts.next() {
+                    if message_parts.next().is_some() {
                         if let Some(position_info) = message_parts.next() {
                             let mut position_info_parts = position_info.split('(');
                             if let Some(error_line) = position_info_parts.next() {
@@ -139,7 +145,6 @@ pub struct Filter {
     fragment_shader: Box<dyn Shader>,
 
     vertex_buffer: VertexBuffer<Vertex>,
-    instance_attribute_buffer: VertexBuffer<InstanceAttributes>,
     index_buffer: IndexBuffer<u16>,
 
     vertex_text: String,
@@ -165,7 +170,7 @@ impl Filter {
     pub fn from_config(
         path_list: &[&Path],
         config: &FilterConfig,
-        display: &Display,
+        display: &dyn Facade,
         resolution: (usize, usize),
     ) -> Result<Self> {
         let mut vertex_shader = Box::new(ShaderComposer::default());
@@ -234,7 +239,7 @@ impl Filter {
     }
 
     pub fn new(
-        display: &Display,
+        display: &dyn Facade,
         resolution: (usize, usize),
         mode: FilterMode,
         vertex_shader: Box<dyn Shader>,
@@ -273,23 +278,9 @@ impl Filter {
             .context("Failed to create vertex buffer")?
         };
 
-        let instance_attribute_buffer = {
-            let data = match mode {
-                FilterMode::Particles(count) => (0..count)
-                    .map(|index| InstanceAttributes {
-                        instance_id: index as i32,
-                    })
-                    .collect::<Vec<_>>(),
-                _ => vec![InstanceAttributes { instance_id: 0 }],
-            };
-
-            glium::vertex::VertexBuffer::dynamic(display, &data)
-                .context("Failed to create instance attributes buffer")?
-        };
-
         // building the index buffer
         let index_buffer =
-            IndexBuffer::new(display, PrimitiveType::TriangleStrip, &[1 as u16, 2, 0, 3])
+            IndexBuffer::new(display, PrimitiveType::TriangleStrip, &[1u16, 2, 0, 3])
                 .context("Failed to create index buffer")?;
 
         let vertex_text = vertex_shader.get_text().to_owned();
@@ -315,7 +306,6 @@ impl Filter {
             fragment_shader,
 
             vertex_buffer,
-            instance_attribute_buffer,
             index_buffer,
 
             vertex_text,
@@ -352,7 +342,7 @@ impl Filter {
         self.mouse_position = (position.0, position.1, 0.0, 0.0);
     }
 
-    pub fn update(&mut self, display: &Display) {
+    pub fn update(&mut self, display: &dyn Facade) {
         self.vertex_shader.update();
         self.fragment_shader.update();
 
@@ -444,7 +434,7 @@ impl Filter {
 
     pub fn render(
         &self,
-        display: &Display,
+        display: &dyn Facade,
         input_uniform_holder: &HashMap<
             &String,
             (
@@ -459,7 +449,7 @@ impl Filter {
                 Option<(MinifySamplerFilter, MagnifySamplerFilter)>,
             ),
         >,
-        framebuffer_texture: Option<&Texture2d>,
+        target: RenderTarget,
         mode_params: &FilterMode,
     ) -> Result<()> {
         let instance_attribute_buffer = if let FilterMode::Particles(count) = mode_params {
@@ -646,40 +636,40 @@ impl Filter {
             Default::default()
         };
 
-        if let Some(framebuffer_texture) = framebuffer_texture {
-            let mut framebuffer = SimpleFrameBuffer::new(display, framebuffer_texture)
-                .context("Failed to create target buffer for rendering")?;
-            framebuffer.clear_color(0.0, 0.0, 0.0, 0.0);
+        match target {
+            RenderTarget::FrameBuffer(framebuffer_texture) => {
+                let mut framebuffer = SimpleFrameBuffer::new(display, framebuffer_texture)
+                    .context("Failed to create target buffer for rendering")?;
+                framebuffer.clear_color(0.0, 0.0, 0.0, 0.0);
 
-            framebuffer
-                .draw(
-                    (
-                        &self.vertex_buffer,
-                        instance_attribute_buffer.per_instance().unwrap(),
-                    ),
-                    &self.index_buffer,
-                    &self.program,
-                    &uniforms_holder,
-                    &draw_params,
-                )
-                .context("Failed to render filter to framebuffer")?;
-        } else {
-            let mut target = display.draw();
-            target.clear_color(0.0, 0.0, 0.0, 0.0);
-            target
-                .draw(
-                    (
-                        &self.vertex_buffer,
-                        instance_attribute_buffer.per_instance().unwrap(),
-                    ),
-                    &self.index_buffer,
-                    &self.program,
-                    &uniforms_holder,
-                    &draw_params,
-                )
-                .context("Failed to render filter to display")?;
-
-            target.finish().context("Failed to finalize rendering")?;
+                framebuffer
+                    .draw(
+                        (
+                            &self.vertex_buffer,
+                            instance_attribute_buffer.per_instance().unwrap(),
+                        ),
+                        &self.index_buffer,
+                        &self.program,
+                        &uniforms_holder,
+                        &draw_params,
+                    )
+                    .context("Failed to render filter to framebuffer")?;
+            }
+            RenderTarget::Window(window_frame) => {
+                window_frame.clear_color(0.0, 0.0, 0.0, 0.0);
+                window_frame
+                    .draw(
+                        (
+                            &self.vertex_buffer,
+                            instance_attribute_buffer.per_instance().unwrap(),
+                        ),
+                        &self.index_buffer,
+                        &self.program,
+                        &uniforms_holder,
+                        &draw_params,
+                    )
+                    .context("Failed to render filter to display")?;
+            }
         }
 
         Ok(())
