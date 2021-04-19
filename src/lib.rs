@@ -68,8 +68,8 @@ pub struct ShaderView {
     dynamic: bool,
 
     filter_list: HashMap<String, Filter>,
-    render_buffer_list: HashMap<String, (Vec<Texture2d>, (u32, u32))>,
-    view_chain: Vec<Stage>,
+    render_buffer_list: Vec<(Vec<Texture2d>, (u32, u32))>,
+    render_chain: Vec<Stage>,
     final_stage: Stage,
 }
 
@@ -86,7 +86,7 @@ impl ShaderView {
 
         let mut view_chain = Vec::new();
         let mut filter_list = HashMap::new();
-        let mut render_buffer_list = HashMap::new();
+        let mut render_buffer_list = Vec::new();
 
         for (filter_name, (filter_path, filter_config)) in filters {
             let filter = Filter::from_config(
@@ -102,30 +102,27 @@ impl ShaderView {
             let stage = Stage::from_config(&render_stage_config.name, display, render_stage_config)
                 .context("Failed to build render stage")?;
 
-            render_buffer_list.insert(
-                render_stage_config.name.clone(),
-                (
-                    vec![
-                        Texture2d::empty_with_format(
-                            display,
-                            stage.get_buffer_format(),
-                            MipmapsOption::EmptyMipmaps,
-                            resolution.0 as u32,
-                            resolution.1 as u32,
-                        )
-                        .context("Failed to create a rendering buffer")?,
-                        Texture2d::empty_with_format(
-                            display,
-                            stage.get_buffer_format(),
-                            MipmapsOption::EmptyMipmaps,
-                            resolution.0 as u32,
-                            resolution.1 as u32,
-                        )
-                        .context("Failed to create a rendering buffer")?,
-                    ],
-                    (resolution.0 as u32, resolution.1 as u32),
-                ),
-            );
+            render_buffer_list.push((
+                vec![
+                    Texture2d::empty_with_format(
+                        display,
+                        stage.get_buffer_format(),
+                        MipmapsOption::EmptyMipmaps,
+                        resolution.0 as u32,
+                        resolution.1 as u32,
+                    )
+                    .context("Failed to create a rendering buffer")?,
+                    Texture2d::empty_with_format(
+                        display,
+                        stage.get_buffer_format(),
+                        MipmapsOption::EmptyMipmaps,
+                        resolution.0 as u32,
+                        resolution.1 as u32,
+                    )
+                    .context("Failed to create a rendering buffer")?,
+                ],
+                (resolution.0 as u32, resolution.1 as u32),
+            ));
 
             view_chain.push(stage);
         }
@@ -152,7 +149,7 @@ impl ShaderView {
 
             filter_list,
             render_buffer_list,
-            view_chain,
+            render_chain: view_chain,
             final_stage,
         })
     }
@@ -167,6 +164,45 @@ impl ShaderView {
 
     pub fn set_mouse_position(&mut self, position: (f64, f64)) {
         self.mouse_position = position;
+    }
+
+    pub fn remove_render_stage(&mut self, stage_index: usize) {
+        self.render_buffer_list.remove(stage_index);
+        self.render_chain.remove(stage_index);
+    }
+
+    pub fn add_render_stage(&mut self, display: &dyn Facade, stage: Stage) -> Result<()> {
+        self.render_buffer_list.push((
+            vec![
+                Texture2d::empty_with_format(
+                    display,
+                    stage.get_buffer_format(),
+                    MipmapsOption::EmptyMipmaps,
+                    self.resolution.0 as u32,
+                    self.resolution.1 as u32,
+                )
+                .context("Failed to create a rendering buffer")?,
+                Texture2d::empty_with_format(
+                    display,
+                    stage.get_buffer_format(),
+                    MipmapsOption::EmptyMipmaps,
+                    self.resolution.0 as u32,
+                    self.resolution.1 as u32,
+                )
+                .context("Failed to create a rendering buffer")?,
+            ],
+            (self.resolution.0 as u32, self.resolution.1 as u32),
+        ));
+        self.render_chain.push(stage);
+
+        Ok(())
+    }
+
+    pub fn get_render_chain(&mut self) -> &mut Vec<Stage> {
+        &mut self.render_chain
+    }
+    pub fn get_final_stage(&mut self) -> &mut Stage {
+        &mut self.final_stage
     }
 
     pub fn update(
@@ -217,26 +253,34 @@ impl ShaderView {
         Ok(())
     }
 
-    pub fn render(&mut self, display: &dyn Facade, window_frame: &mut Frame) -> Result<()> {
-        for stage in self.view_chain.iter() {
-            if let Some((render_target_pack, _)) = self.render_buffer_list.get(stage.get_name()) {
+    pub fn render_stages(&mut self, display: &dyn Facade) -> Result<()> {
+        for (stage_index, stage) in self.render_chain.iter().enumerate() {
+            if let Some((render_target_pack, _)) = self.render_buffer_list.get(stage_index) {
                 let render_target = &render_target_pack[1];
 
                 self.render_stage(display, stage, RenderTarget::FrameBuffer(render_target))?;
             }
 
             if let Some((ref mut render_target_pack, _)) =
-                self.render_buffer_list.get_mut(stage.get_name())
+                self.render_buffer_list.get_mut(stage_index)
             {
                 let tmp_buffer = render_target_pack.remove(0);
                 render_target_pack.push(tmp_buffer);
 
                 unsafe {
-                    render_target_pack[0].generate_mipmaps(); //finish().context("Failed to finalize framebuffer rendering")?;
+                    render_target_pack[0].generate_mipmaps();
                 }
             }
         }
 
+        Ok(())
+    }
+
+    pub fn render_final_stage(
+        &mut self,
+        display: &dyn Facade,
+        window_frame: &mut Frame,
+    ) -> Result<()> {
         self.render_stage(
             display,
             &self.final_stage,
@@ -276,11 +320,20 @@ impl ShaderView {
                 ),
             };
 
-            if let Some(render_buffer_pack) = self.render_buffer_list.get(input_name) {
-                render_buffer_list.insert(
-                    uniform_name,
-                    (&render_buffer_pack.0[0], Some((down_sampling, up_sampling))),
-                );
+            let mut render_buffer_for_input = None;
+            for (stage_index, stage) in self.render_chain.iter().enumerate() {
+                if stage.get_name() == input_name {
+                    render_buffer_for_input = Some(stage_index);
+                }
+            }
+
+            if let Some(render_buffer_index) = render_buffer_for_input {
+                if let Some(render_buffer_pack) = self.render_buffer_list.get(render_buffer_index) {
+                    render_buffer_list.insert(
+                        uniform_name,
+                        (&render_buffer_pack.0[0], Some((down_sampling, up_sampling))),
+                    );
+                }
             } else if let Some(uniform_value) = self.uniform_holder.get(input_name) {
                 input_holder.insert(
                     uniform_name,
@@ -307,6 +360,25 @@ impl ShaderView {
         Ok(())
     }
 
+    pub fn set_target_fps(&mut self, target_fps: f64) {
+        self.target_fps = target_fps;
+    }
+
+    pub fn set_locked_speed(&mut self, locked_speed: bool) {
+        self.locked_speed = locked_speed;
+    }
+
+    pub fn get_dynamic_resolution(&self) -> bool {
+        self.dynamic
+    }
+    pub fn set_dynamic_resolution(&mut self, dynamic_resolution: bool) {
+        self.dynamic = dynamic_resolution;
+    }
+
+    pub fn get_resolution(&self) -> (usize, usize) {
+        self.resolution
+    }
+
     pub fn set_resolution(
         &mut self,
         display: &dyn Facade,
@@ -319,7 +391,7 @@ impl ShaderView {
         self.resolution = resolution;
         self.render_buffer_list.clear();
 
-        for stage in self.view_chain.iter_mut() {
+        for stage in self.render_chain.iter() {
             let new_render_buffer_pair = (
                 vec![
                     Texture2d::empty_with_format(
@@ -341,8 +413,8 @@ impl ShaderView {
                 ],
                 (self.resolution.0 as u32, self.resolution.1 as u32),
             );
-            self.render_buffer_list
-                .insert(stage.get_name().to_owned(), new_render_buffer_pair);
+
+            self.render_buffer_list.push(new_render_buffer_pair);
         }
 
         Ok(())

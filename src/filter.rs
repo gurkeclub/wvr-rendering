@@ -656,7 +656,7 @@ impl Filter {
                     .context("Failed to render filter to framebuffer")?;
             }
             RenderTarget::Window(window_frame) => {
-                window_frame.clear_color(0.0, 0.0, 0.0, 0.0);
+                window_frame.clear_color(0.0, 0.0, 0.0, 1.0);
                 window_frame
                     .draw(
                         (

@@ -9,6 +9,7 @@ use glium::texture::UncompressedFloatFormat;
 use wvr_data::config::project_config::{
     BufferPrecision, FilterMode, RenderStageConfig, SampledInput,
 };
+use wvr_data::DataHolder;
 
 use crate::UniformHolder;
 
@@ -88,5 +89,33 @@ impl Stage {
 
     pub fn get_buffer_format(&self) -> UncompressedFloatFormat {
         self.buffer_format
+    }
+
+    pub fn set_variable(
+        &mut self,
+        display: &dyn Facade,
+        variable_name: &str,
+        variable_value: &DataHolder,
+    ) -> Result<()> {
+        self.variable_list.insert(
+            variable_name.to_string(),
+            UniformHolder::try_from((display, variable_value))?,
+        );
+
+        Ok(())
+    }
+    pub fn set_name(&mut self, name: &str) {
+        self.name = name.to_string();
+    }
+    pub fn set_input(&mut self, input_name: &str, input: &SampledInput) {
+        self.input_map.insert(input_name.to_string(), input.clone());
+    }
+
+    pub fn set_filter(&mut self, filter_name: &str) {
+        self.filter = filter_name.to_string();
+    }
+
+    pub fn set_filter_mode_params(&mut self, filter_mode_params: &FilterMode) {
+        self.filter_mode_params = filter_mode_params.clone();
     }
 }
