@@ -171,6 +171,14 @@ impl ShaderView {
         self.render_chain.remove(stage_index);
     }
 
+    pub fn move_render_stage(&mut self, original_index: usize, target_index: usize) {
+        let render_buffer = self.render_buffer_list.remove(original_index);
+        self.render_buffer_list.insert(target_index, render_buffer);
+
+        let render_stage = self.render_chain.remove(original_index);
+        self.render_chain.insert(target_index, render_stage);
+    }
+
     pub fn add_render_stage(&mut self, display: &dyn Facade, stage: Stage) -> Result<()> {
         self.render_buffer_list.push((
             vec![
@@ -229,7 +237,7 @@ impl ShaderView {
             source.set_beat(self.beat, self.locked_speed);
             source.set_time(current_time, self.locked_speed);
 
-            for ref source_id in source.provides() {
+            for source_id in &source.provides() {
                 if let Some(ref value) = source.get(&source_id, true) {
                     if let Ok(value) = UniformHolder::try_from((display as &dyn Facade, value)) {
                         self.uniform_holder.insert(source_id.to_owned(), value);
@@ -315,7 +323,7 @@ impl ShaderView {
                 ),
                 SampledInput::Mipmaps(input_name) => (
                     input_name,
-                    MinifySamplerFilter::LinearMipmapNearest,
+                    MinifySamplerFilter::LinearMipmapLinear,
                     MagnifySamplerFilter::Linear,
                 ),
             };
