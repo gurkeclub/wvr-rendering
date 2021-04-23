@@ -20,6 +20,8 @@ pub struct Stage {
     pub input_map: HashMap<String, SampledInput>,
     pub variable_list: HashMap<String, UniformHolder>,
     pub buffer_format: UncompressedFloatFormat,
+
+    pub recreate_buffers: bool,
 }
 
 impl Stage {
@@ -64,6 +66,7 @@ impl Stage {
             input_map,
             variable_list,
             buffer_format,
+            recreate_buffers: true,
         }
     }
 
@@ -89,6 +92,19 @@ impl Stage {
 
     pub fn get_buffer_format(&self) -> UncompressedFloatFormat {
         self.buffer_format
+    }
+
+    pub fn set_precision(&mut self, precision: &BufferPrecision) {
+        let new_buffer_format = match precision {
+            BufferPrecision::U8 => UncompressedFloatFormat::U8U8U8U8,
+            BufferPrecision::F16 => UncompressedFloatFormat::F16F16F16F16,
+            BufferPrecision::F32 => UncompressedFloatFormat::F32F32F32F32,
+        };
+        if new_buffer_format != self.buffer_format {
+            self.buffer_format = new_buffer_format;
+
+            self.recreate_buffers = true;
+        }
     }
 
     pub fn set_variable(

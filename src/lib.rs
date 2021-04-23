@@ -100,8 +100,9 @@ impl ShaderView {
         }
 
         for render_stage_config in render_chain {
-            let stage = Stage::from_config(&render_stage_config.name, display, render_stage_config)
-                .context("Failed to build render stage")?;
+            let mut stage =
+                Stage::from_config(&render_stage_config.name, display, render_stage_config)
+                    .context("Failed to build render stage")?;
 
             render_buffer_list.push((
                 vec![
@@ -124,6 +125,8 @@ impl ShaderView {
                 ],
                 (resolution.0 as u32, resolution.1 as u32),
             ));
+
+            stage.recreate_buffers = false;
 
             view_chain.push(stage);
         }
@@ -260,6 +263,37 @@ impl ShaderView {
             filter.set_resolution(self.resolution);
 
             filter.update(display);
+        }
+
+        for (stage_index, ref mut stage) in self.render_chain.iter_mut().enumerate() {
+            if stage.recreate_buffers {
+                self.render_buffer_list.remove(stage_index);
+                self.render_buffer_list.insert(
+                    stage_index,
+                    (
+                        vec![
+                            Texture2d::empty_with_format(
+                                display,
+                                stage.get_buffer_format(),
+                                MipmapsOption::EmptyMipmaps,
+                                self.resolution.0 as u32,
+                                self.resolution.1 as u32,
+                            )
+                            .context("Failed to create a rendering buffer")?,
+                            Texture2d::empty_with_format(
+                                display,
+                                stage.get_buffer_format(),
+                                MipmapsOption::EmptyMipmaps,
+                                self.resolution.0 as u32,
+                                self.resolution.1 as u32,
+                            )
+                            .context("Failed to create a rendering buffer")?,
+                        ],
+                        (self.resolution.0 as u32, self.resolution.1 as u32),
+                    ),
+                );
+            }
+            stage.recreate_buffers = false;
         }
 
         self.last_update_time = new_update_time;
