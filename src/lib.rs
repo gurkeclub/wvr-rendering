@@ -79,7 +79,7 @@ impl ShaderView {
         view_config: &ViewConfig,
         render_chain: &[RenderStageConfig],
         final_stage_config: &RenderStageConfig,
-        filters: &HashMap<String, (PathBuf, FilterConfig)>,
+        filters: &HashMap<String, (PathBuf, FilterConfig, bool)>,
         display: &dyn Facade,
     ) -> Result<Self> {
         let resolution = (view_config.width as usize, view_config.height as usize);
@@ -88,12 +88,13 @@ impl ShaderView {
         let mut filter_list = HashMap::new();
         let mut render_buffer_list = Vec::new();
 
-        for (filter_name, (filter_path, filter_config)) in filters {
+        for (filter_name, (filter_path, filter_config, system_filter)) in filters {
             let filter = Filter::from_config(
                 &[&filter_path.join("src"), &wvr_data::get_libs_path()],
                 filter_config,
                 display,
                 resolution,
+                *system_filter,
             )?;
             filter_list.insert(filter_name.clone(), filter);
         }
@@ -233,14 +234,19 @@ impl ShaderView {
             self.begin_time.elapsed().as_secs_f64()
         };
 
-        for (_input_name, source) in uniform_sources.iter_mut() {
+        for (input_name, source) in uniform_sources.iter_mut() {
             source.set_beat(self.beat, self.locked_speed);
             source.set_time(current_time, self.locked_speed);
 
             for source_id in &source.provides() {
                 if let Some(ref value) = source.get(&source_id, true) {
                     if let Ok(value) = UniformHolder::try_from((display as &dyn Facade, value)) {
-                        self.uniform_holder.insert(source_id.to_owned(), value);
+                        let source_id = if source_id.is_empty() {
+                            input_name.clone()
+                        } else {
+                            source_id.clone()
+                        };
+                        self.uniform_holder.insert(source_id, value);
                     }
                 }
             }

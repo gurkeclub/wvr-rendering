@@ -172,6 +172,7 @@ impl Filter {
         config: &FilterConfig,
         display: &dyn Facade,
         resolution: (usize, usize),
+        system_filter: bool,
     ) -> Result<Self> {
         let mut vertex_shader = Box::new(ShaderComposer::default());
 
@@ -193,7 +194,10 @@ impl Filter {
                 )));
             }
 
-            vertex_shader.push(Box::new(FileShader::new(shader_file_path.unwrap(), true)?));
+            vertex_shader.push(Box::new(FileShader::new(
+                shader_file_path.unwrap(),
+                !system_filter,
+            )?));
         }
 
         let mut fragment_shader = Box::new(ShaderComposer::default());
