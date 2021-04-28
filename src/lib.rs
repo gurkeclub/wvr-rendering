@@ -29,7 +29,6 @@ use wvr_data::InputProvider;
 pub mod filter;
 pub mod stage;
 pub mod uniform;
-pub mod utils;
 
 use filter::{Filter, RenderTarget};
 use stage::Stage;

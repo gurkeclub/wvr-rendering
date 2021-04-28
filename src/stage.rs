@@ -133,6 +133,18 @@ impl Stage {
         Ok(())
     }
 
+    pub fn set_variable_automation(
+        &mut self,
+        variable_name: &str,
+        variable_automation: &Automation,
+    ) -> Result<()> {
+        if let Some((_, old_variable_automation)) = self.variable_list.get_mut(variable_name) {
+            *old_variable_automation = variable_automation.clone();
+        }
+
+        Ok(())
+    }
+
     pub fn set_beat(&mut self, display: &dyn Facade, beat: f64) -> Result<()> {
         for (variable_name, (variable_value, automation)) in &self.variable_list {
             if !automation.is_none() {
