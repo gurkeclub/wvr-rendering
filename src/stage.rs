@@ -7,7 +7,7 @@ use glium::backend::Facade;
 use glium::texture::UncompressedFloatFormat;
 
 use wvr_data::config::project_config::{
-    BufferPrecision, FilterMode, RenderStageConfig, SampledInput,
+    Automation, BufferPrecision, FilterMode, RenderStageConfig, SampledInput,
 };
 use wvr_data::DataHolder;
 
@@ -18,7 +18,8 @@ pub struct Stage {
     filter: String,
     filter_mode_params: FilterMode,
     pub input_map: HashMap<String, SampledInput>,
-    pub variable_list: HashMap<String, UniformHolder>,
+    pub variable_list: HashMap<String, (DataHolder, Automation)>,
+    pub uniform_list: HashMap<String, UniformHolder>,
     pub buffer_format: UncompressedFloatFormat,
 
     pub recreate_buffers: bool,
@@ -30,9 +31,9 @@ impl Stage {
         display: &dyn Facade,
         config: &RenderStageConfig,
     ) -> Result<Self> {
-        let mut variable_list = HashMap::new();
-        for (key, value) in config.variables.iter() {
-            variable_list.insert(key.clone(), UniformHolder::try_from((display, value))?);
+        let mut uniform_list = HashMap::new();
+        for (key, (value, _)) in config.variables.iter() {
+            uniform_list.insert(key.clone(), UniformHolder::try_from((display, value))?);
         }
 
         let buffer_format = match &config.precision {
@@ -47,7 +48,8 @@ impl Stage {
             &config.filter,
             config.filter_mode_params.clone(),
             config.inputs.clone(),
-            variable_list,
+            config.variables.clone(),
+            uniform_list,
         ))
     }
 
@@ -57,7 +59,8 @@ impl Stage {
         filter: &str,
         filter_mode_params: FilterMode,
         input_map: HashMap<String, SampledInput>,
-        variable_list: HashMap<String, UniformHolder>,
+        variable_list: HashMap<String, (DataHolder, Automation)>,
+        uniform_list: HashMap<String, UniformHolder>,
     ) -> Self {
         Self {
             name: name.to_string(),
@@ -65,6 +68,7 @@ impl Stage {
             filter_mode_params,
             input_map,
             variable_list,
+            uniform_list,
             buffer_format,
             recreate_buffers: true,
         }
@@ -86,8 +90,8 @@ impl Stage {
         &self.input_map
     }
 
-    pub fn get_variable_list(&self) -> &HashMap<String, UniformHolder> {
-        &self.variable_list
+    pub fn get_uniform_list(&self) -> &HashMap<String, UniformHolder> {
+        &self.uniform_list
     }
 
     pub fn get_buffer_format(&self) -> UncompressedFloatFormat {
@@ -113,13 +117,41 @@ impl Stage {
         variable_name: &str,
         variable_value: &DataHolder,
     ) -> Result<()> {
-        self.variable_list.insert(
+        if let Some((old_variable_value, _)) = self.variable_list.get_mut(variable_name) {
+            *old_variable_value = variable_value.clone();
+        } else {
+            self.variable_list.insert(
+                variable_name.to_string(),
+                (variable_value.clone(), Automation::None),
+            );
+        }
+        self.uniform_list.insert(
             variable_name.to_string(),
             UniformHolder::try_from((display, variable_value))?,
         );
 
         Ok(())
     }
+
+    pub fn set_beat(&mut self, display: &dyn Facade, beat: f64) -> Result<()> {
+        for (variable_name, (variable_value, automation)) in &self.variable_list {
+            if !automation.is_none() {
+                if let Some(new_variable_value) = automation.apply(variable_value, beat) {
+                    let new_uniform_value =
+                        UniformHolder::try_from((display, &new_variable_value))?;
+                    if let Some(old_automation_value) = self.uniform_list.get_mut(variable_name) {
+                        *old_automation_value = new_uniform_value;
+                    } else {
+                        self.uniform_list
+                            .insert(variable_name.to_string(), new_uniform_value);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn set_name(&mut self, name: &str) {
         self.name = name.to_string();
     }

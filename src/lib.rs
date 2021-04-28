@@ -292,8 +292,11 @@ impl ShaderView {
                         (self.resolution.0 as u32, self.resolution.1 as u32),
                     ),
                 );
+
+                stage.recreate_buffers = false;
             }
-            stage.recreate_buffers = false;
+
+            stage.set_beat(display, self.beat)?;
         }
 
         self.last_update_time = new_update_time;
@@ -390,7 +393,7 @@ impl ShaderView {
             }
         }
 
-        for (uniform_name, uniform_value) in stage.get_variable_list() {
+        for (uniform_name, uniform_value) in stage.get_uniform_list() {
             input_holder.insert(uniform_name, (uniform_value, None));
         }
 
