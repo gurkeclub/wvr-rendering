@@ -6,7 +6,6 @@ use std::borrow::Cow;
 use std::collections::hash_map::HashMap;
 use std::convert::TryFrom;
 use std::path::PathBuf;
-use std::time::Instant;
 use std::vec::Vec;
 
 use anyhow::{Context, Result};
@@ -53,17 +52,9 @@ impl Texture2dDataSink<(u8, u8, u8, u8)> for RGBAImageData {
 pub struct ShaderView {
     uniform_holder: HashMap<String, UniformHolder>,
 
-    begin_time: Instant,
-    last_update_time: Instant,
-
     resolution: (usize, usize),
-    frame_count: usize,
-    beat: f64,
-    bpm: f64,
     mouse_position: (f64, f64),
 
-    target_fps: f64,
-    locked_speed: bool,
     dynamic: bool,
 
     filter_list: HashMap<String, Filter>,
@@ -74,7 +65,6 @@ pub struct ShaderView {
 
 impl ShaderView {
     pub fn new(
-        bpm: f64,
         view_config: &ViewConfig,
         render_chain: &[RenderStageConfig],
         final_stage_config: &RenderStageConfig,
@@ -136,17 +126,8 @@ impl ShaderView {
         Ok(Self {
             uniform_holder: HashMap::new(),
 
-            begin_time: Instant::now(),
-            last_update_time: Instant::now(),
-
             resolution,
-            bpm,
-            frame_count: 0,
-            beat: 0.0,
             mouse_position: (0.0, 0.0),
-
-            target_fps: view_config.target_fps as f64,
-            locked_speed: view_config.locked_speed,
 
             dynamic: view_config.dynamic,
 
@@ -155,14 +136,6 @@ impl ShaderView {
             render_chain: view_chain,
             final_stage,
         })
-    }
-
-    pub fn get_frame_count(&self) -> usize {
-        self.frame_count
-    }
-
-    pub fn set_bpm(&mut self, bpm: f64) {
-        self.bpm = bpm;
     }
 
     pub fn set_mouse_position(&mut self, position: (f64, f64)) {
@@ -220,26 +193,11 @@ impl ShaderView {
         &mut self,
         display: &dyn Facade,
         uniform_sources: &mut HashMap<String, Box<dyn InputProvider>>,
+        time: f64,
+        beat: f64,
+        frame_count: usize,
     ) -> Result<()> {
-        let new_update_time = Instant::now();
-
-        self.beat += if self.locked_speed {
-            self.bpm / (60.0 * self.target_fps)
-        } else {
-            let time_diff = new_update_time - self.last_update_time;
-            time_diff.as_secs_f64() * self.bpm / 60.0
-        };
-
-        let current_time = if self.locked_speed {
-            self.frame_count as f64 / self.target_fps
-        } else {
-            self.begin_time.elapsed().as_secs_f64()
-        };
-
         for (input_name, source) in uniform_sources.iter_mut() {
-            source.set_beat(self.beat, self.locked_speed);
-            source.set_time(current_time, self.locked_speed);
-
             for source_id in &source.provides() {
                 if let Some(ref value) = source.get(&source_id, true) {
                     if let Ok(value) = UniformHolder::try_from((display as &dyn Facade, value)) {
@@ -255,9 +213,9 @@ impl ShaderView {
         }
 
         for filter in self.filter_list.values_mut() {
-            filter.set_time(current_time);
-            filter.set_beat(self.beat);
-            filter.set_frame_count(self.frame_count);
+            filter.set_time(time);
+            filter.set_beat(beat);
+            filter.set_frame_count(frame_count);
             filter.set_mouse_position(self.mouse_position);
             filter.set_resolution(self.resolution);
 
@@ -295,10 +253,8 @@ impl ShaderView {
                 stage.recreate_buffers = false;
             }
 
-            stage.set_beat(display, self.beat)?;
+            stage.set_beat(display, beat)?;
         }
-
-        self.last_update_time = new_update_time;
 
         Ok(())
     }
@@ -336,8 +292,6 @@ impl ShaderView {
             &self.final_stage,
             RenderTarget::Window(window_frame),
         )?;
-
-        self.frame_count += 1;
 
         Ok(())
     }
@@ -408,14 +362,6 @@ impl ShaderView {
         }
 
         Ok(())
-    }
-
-    pub fn set_target_fps(&mut self, target_fps: f64) {
-        self.target_fps = target_fps;
-    }
-
-    pub fn set_locked_speed(&mut self, locked_speed: bool) {
-        self.locked_speed = locked_speed;
     }
 
     pub fn get_dynamic_resolution(&self) -> bool {
