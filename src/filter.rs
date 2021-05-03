@@ -293,7 +293,7 @@ impl Filter {
 
         // compiling shaders and linking them together
 
-        let program = match program!(display, 140 => { vertex: &vertex_text, fragment: &fragment_text })
+        let program = match program!(display, 140 => { vertex: &vertex_text, fragment: &fragment_text, outputs_srgb: true })
         {
             Ok(program) => program,
             Err(e) => panic!(
