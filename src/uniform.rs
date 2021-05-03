@@ -5,13 +5,15 @@ use anyhow::{Context, Error, Result};
 use glium::backend::Facade;
 use glium::texture::RawImage2d;
 use glium::texture::SrgbTexture2d;
+use glium::texture::Texture2d;
 use glium::texture::{DepthTexture2d, MipmapsOption};
 
 use wvr_data::DataHolder;
 
 pub enum UniformHolder {
     Buffer((DepthTexture2d, usize)),
-    Texture((SrgbTexture2d, (u32, u32))),
+    Texture((Texture2d, (u32, u32))),
+    SrgbTexture((SrgbTexture2d, (u32, u32))),
 
     Float(f32),
     Float2((f32, f32)),
@@ -42,6 +44,17 @@ impl TryFrom<(&dyn Facade, &DataHolder)> for UniformHolder {
             DataHolder::Bool(value) => Ok(UniformHolder::Bool(*value)),
             DataHolder::Texture((resolution, texture_data)) => {
                 let image = RawImage2d::from_raw_rgb(texture_data.clone(), *resolution);
+                let texture = Texture2d::with_mipmaps(display, image, MipmapsOption::EmptyMipmaps)
+                    .context("Failed to build texture from texture data")?;
+
+                unsafe {
+                    texture.generate_mipmaps();
+                }
+
+                Ok(UniformHolder::Texture((texture, *resolution)))
+            }
+            DataHolder::SrgbTexture((resolution, texture_data)) => {
+                let image = RawImage2d::from_raw_rgb(texture_data.clone(), *resolution);
                 let texture =
                     SrgbTexture2d::with_mipmaps(display, image, MipmapsOption::EmptyMipmaps)
                         .context("Failed to build texture from texture data")?;
@@ -50,7 +63,7 @@ impl TryFrom<(&dyn Facade, &DataHolder)> for UniformHolder {
                     texture.generate_mipmaps();
                 }
 
-                Ok(UniformHolder::Texture((texture, *resolution)))
+                Ok(UniformHolder::SrgbTexture((texture, *resolution)))
             }
             DataHolder::FloatArray(array) => Ok(UniformHolder::Buffer((
                 DepthTexture2d::new(display, vec![array.clone()])

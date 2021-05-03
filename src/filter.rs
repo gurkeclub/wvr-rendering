@@ -51,7 +51,8 @@ implement_vertex!(InstanceAttributes, instance_id);
 struct CustomUniforms<'hihi> {
     pub primitive_list: Vec<(&'hihi String, &'hihi dyn AsUniformValue)>,
     pub render_targets_list: Vec<(&'hihi String, Sampler<'hihi, Texture2d>)>,
-    pub texture_list: Vec<(&'hihi String, Sampler<'hihi, SrgbTexture2d>)>,
+    pub texture_list: Vec<(&'hihi String, Sampler<'hihi, Texture2d>)>,
+    pub srgb_texture_list: Vec<(&'hihi String, Sampler<'hihi, SrgbTexture2d>)>,
     pub buffer_list: Vec<(&'hihi String, Sampler<'hihi, DepthTexture2d>)>,
 }
 
@@ -234,7 +235,7 @@ impl Filter {
         Self::new(
             display,
             resolution,
-            config.mode.clone(),
+            config.mode,
             vertex_shader,
             fragment_shader,
             config.inputs.clone(),
@@ -481,6 +482,7 @@ impl Filter {
         let mut uniform_vec: Vec<(&String, &dyn AsUniformValue)> = Vec::new();
         let mut uniform_render_targets_vec = Vec::new();
         let mut uniform_textures_vec = Vec::new();
+        let mut uniform_srgb_textures_vec = Vec::new();
         let mut uniform_buffers_vec = Vec::new();
 
         let mut loaded_uniform_name_list = Vec::new();
@@ -516,6 +518,16 @@ impl Filter {
                                 .minify_filter(*down_sampling)
                                 .magnify_filter(*up_sampling);
                             uniform_textures_vec.push((uniform_name, texture));
+                        }
+                    }
+                    UniformHolder::SrgbTexture((texture, _resolution)) => {
+                        if let Some((down_sampling, up_sampling)) = sampling {
+                            let texture = texture
+                                .sampled()
+                                .wrap_function(SamplerWrapFunction::Repeat)
+                                .minify_filter(*down_sampling)
+                                .magnify_filter(*up_sampling);
+                            uniform_srgb_textures_vec.push((uniform_name, texture));
                         }
                     }
                     UniformHolder::Float(value) => uniform_vec.push((uniform_name, value)),
@@ -560,6 +572,16 @@ impl Filter {
                             uniform_textures_vec.push((uniform_name, texture));
                         }
                     }
+                    UniformHolder::SrgbTexture((texture, _resolution)) => {
+                        if let Some((down_sampling, up_sampling)) = sampling {
+                            let texture = texture
+                                .sampled()
+                                .wrap_function(SamplerWrapFunction::Repeat)
+                                .minify_filter(*down_sampling)
+                                .magnify_filter(*up_sampling);
+                            uniform_srgb_textures_vec.push((uniform_name, texture));
+                        }
+                    }
                     UniformHolder::Float(value) => uniform_vec.push((uniform_name, value)),
                     UniformHolder::Float2(value) => uniform_vec.push((uniform_name, value)),
                     UniformHolder::Float3(value) => uniform_vec.push((uniform_name, value)),
@@ -601,6 +623,16 @@ impl Filter {
                         uniform_textures_vec.push((uniform_name, texture));
                     }
                 }
+                UniformHolder::SrgbTexture((texture, _resolution)) => {
+                    if let Some((down_sampling, up_sampling)) = sampling {
+                        let texture = texture
+                            .sampled()
+                            .wrap_function(SamplerWrapFunction::Repeat)
+                            .minify_filter(*down_sampling)
+                            .magnify_filter(*up_sampling);
+                        uniform_srgb_textures_vec.push((uniform_name, texture));
+                    }
+                }
                 UniformHolder::Float(value) => uniform_vec.push((uniform_name, value)),
                 UniformHolder::Float2(value) => uniform_vec.push((uniform_name, value)),
                 UniformHolder::Float3(value) => uniform_vec.push((uniform_name, value)),
@@ -618,6 +650,7 @@ impl Filter {
             primitive_list: uniform_vec,
             render_targets_list: uniform_render_targets_vec,
             texture_list: uniform_textures_vec,
+            srgb_texture_list: uniform_srgb_textures_vec,
             buffer_list: uniform_buffers_vec,
         };
 
