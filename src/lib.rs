@@ -417,8 +417,10 @@ impl ShaderView {
     }
 
     pub fn take_screenshot(&self, display: &dyn Facade) -> Result<RGBAImageData> {
+        /*
         // Get information about current framebuffer
         let dimensions = display.get_context().get_framebuffer_dimensions();
+
         let rect = Rect {
             left: 0,
             bottom: 0,
@@ -444,6 +446,9 @@ impl ShaderView {
             .read_to_pixel_buffer()
             .read_as_texture_2d()
             .context("Could not read blit texture as a pixel buffer")?;
+            */
+
+        let texture = display.get_context().read_front_buffer()?;
         Ok(texture)
     }
 }
