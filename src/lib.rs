@@ -416,39 +416,19 @@ impl ShaderView {
         Ok(())
     }
 
-    pub fn take_screenshot(&self, display: &dyn Facade) -> Result<RGBAImageData> {
-        /*
-        // Get information about current framebuffer
-        let dimensions = display.get_context().get_framebuffer_dimensions();
-
-        let rect = Rect {
-            left: 0,
-            bottom: 0,
-            width: dimensions.0,
-            height: dimensions.1,
-        };
-        let blit_target = BlitTarget {
-            left: 0,
-            bottom: 0,
-            width: dimensions.0 as i32,
-            height: dimensions.1 as i32,
-        };
-
-        // Create temporary texture and blit the front buffer to it
-        let texture = SrgbTexture2d::empty(display, dimensions.0, dimensions.1)
-            .context("Could not create empty texture for screenshot")?;
-        let framebuffer = SimpleFrameBuffer::new(display, &texture)
-            .context("Could not create frame buffer for screenshot bliting")?;
-        framebuffer.blit_from_frame(&rect, &blit_target, MagnifySamplerFilter::Nearest);
-
-        // Read the texture into new pixel buffer
-        let texture = texture
-            .read_to_pixel_buffer()
-            .read_as_texture_2d()
-            .context("Could not read blit texture as a pixel buffer")?;
-            */
-
-        let texture = display.get_context().read_front_buffer()?;
-        Ok(texture)
+    pub fn take_screenshot(&self, stage_name: &str) -> Option<Result<RGBAImageData>> {
+        for (render_stage, (texture_list, _)) in
+            self.render_chain.iter().zip(&self.render_buffer_list)
+        {
+            if render_stage.get_name() == stage_name {
+                return Some(
+                    texture_list[0]
+                        .read_to_pixel_buffer()
+                        .read_as_texture_2d()
+                        .context("Could not read blit texture as a pixel buffer"),
+                );
+            }
+        }
+        None
     }
 }
