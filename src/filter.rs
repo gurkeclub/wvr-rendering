@@ -221,7 +221,10 @@ impl Filter {
                 )));
             }
 
-            fragment_shader.push(Box::new(FileShader::new(shader_file_path.unwrap(), true)?));
+            fragment_shader.push(Box::new(FileShader::new(
+                shader_file_path.unwrap(),
+                !system_filter,
+            )?));
         }
 
         let mut uniform_holder = HashMap::new();
