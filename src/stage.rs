@@ -33,7 +33,10 @@ impl Stage {
     ) -> Result<Self> {
         let mut uniform_list = HashMap::new();
         for (key, (value, _)) in config.variables.iter() {
-            uniform_list.insert(key.clone(), UniformHolder::try_from((display, value))?);
+            uniform_list.insert(
+                key.clone(),
+                UniformHolder::try_from((display, value, false))?,
+            );
         }
 
         let buffer_format = match &config.precision {
@@ -127,7 +130,7 @@ impl Stage {
         }
         self.uniform_list.insert(
             variable_name.to_string(),
-            UniformHolder::try_from((display, variable_value))?,
+            UniformHolder::try_from((display, variable_value, false))?,
         );
 
         Ok(())
@@ -150,7 +153,7 @@ impl Stage {
             if !automation.is_none() {
                 if let Some(new_variable_value) = automation.apply(variable_value, beat) {
                     let new_uniform_value =
-                        UniformHolder::try_from((display, &new_variable_value))?;
+                        UniformHolder::try_from((display, &new_variable_value, false))?;
                     if let Some(old_automation_value) = self.uniform_list.get_mut(variable_name) {
                         *old_automation_value = new_uniform_value;
                     } else {

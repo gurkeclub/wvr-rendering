@@ -28,11 +28,11 @@ pub enum UniformHolder {
     Mat4([[f32; 4]; 4]),
 }
 
-impl TryFrom<(&dyn Facade, &DataHolder)> for UniformHolder {
+impl TryFrom<(&dyn Facade, &DataHolder, bool)> for UniformHolder {
     type Error = Error;
 
-    fn try_from(uniform: (&dyn Facade, &DataHolder)) -> Result<UniformHolder> {
-        let (display, uniform) = uniform;
+    fn try_from(uniform: (&dyn Facade, &DataHolder, bool)) -> Result<UniformHolder> {
+        let (display, uniform, generate_mipmaps) = uniform;
         match uniform {
             DataHolder::Float(value) => Ok(UniformHolder::Float(*value as f32)),
             DataHolder::Float2(value) => Ok(UniformHolder::Float2((value[0], value[1]))),
@@ -47,8 +47,10 @@ impl TryFrom<(&dyn Facade, &DataHolder)> for UniformHolder {
                 let texture = Texture2d::with_mipmaps(display, image, MipmapsOption::EmptyMipmaps)
                     .context("Failed to build texture from texture data")?;
 
-                unsafe {
-                    texture.generate_mipmaps();
+                if generate_mipmaps {
+                    unsafe {
+                        texture.generate_mipmaps();
+                    }
                 }
 
                 Ok(UniformHolder::Texture((texture, *resolution)))
@@ -59,8 +61,10 @@ impl TryFrom<(&dyn Facade, &DataHolder)> for UniformHolder {
                     SrgbTexture2d::with_mipmaps(display, image, MipmapsOption::EmptyMipmaps)
                         .context("Failed to build texture from texture data")?;
 
-                unsafe {
-                    texture.generate_mipmaps();
+                if generate_mipmaps {
+                    unsafe {
+                        texture.generate_mipmaps();
+                    }
                 }
 
                 Ok(UniformHolder::SrgbTexture((texture, *resolution)))

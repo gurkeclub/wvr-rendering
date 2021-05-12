@@ -10,16 +10,11 @@ use std::vec::Vec;
 
 use anyhow::{Context, Result};
 
-use glium::framebuffer::SimpleFrameBuffer;
 use glium::texture::MipmapsOption;
-use glium::texture::SrgbTexture2d;
 use glium::texture::Texture2d;
 use glium::texture::Texture2dDataSink;
 use glium::uniforms::MagnifySamplerFilter;
-use glium::BlitTarget;
 use glium::Frame;
-use glium::Rect;
-use glium::Surface;
 use glium::{backend::Facade, uniforms::MinifySamplerFilter};
 
 use wvr_data::config::project_config::{FilterConfig, RenderStageConfig, SampledInput, ViewConfig};
@@ -197,15 +192,33 @@ impl ShaderView {
         beat: f64,
         frame_count: usize,
     ) -> Result<()> {
+        let mut texture_with_mipmap_list: Vec<String> = Vec::new();
+        for render_stage in &self.render_chain {
+            for (_, texture_sampling) in render_stage.get_input_map() {
+                if let SampledInput::Mipmaps(texture_name) = texture_sampling {
+                    texture_with_mipmap_list.push(texture_name.to_owned());
+                }
+            }
+        }
+        for (_, texture_sampling) in self.final_stage.get_input_map() {
+            if let SampledInput::Mipmaps(texture_name) = texture_sampling {
+                texture_with_mipmap_list.push(texture_name.to_owned());
+            }
+        }
+
         for (input_name, source) in uniform_sources.iter_mut() {
             for source_id in &source.provides() {
                 if let Some(ref value) = source.get(&source_id, true) {
-                    if let Ok(value) = UniformHolder::try_from((display as &dyn Facade, value)) {
-                        let source_id = if source_id.is_empty() {
-                            input_name.clone()
-                        } else {
-                            source_id.clone()
-                        };
+                    let source_id = if source_id.is_empty() {
+                        input_name.clone()
+                    } else {
+                        source_id.clone()
+                    };
+                    if let Ok(value) = UniformHolder::try_from((
+                        display as &dyn Facade,
+                        value,
+                        texture_with_mipmap_list.contains(&source_id),
+                    )) {
                         self.uniform_holder.insert(source_id, value);
                     }
                 }
@@ -260,6 +273,20 @@ impl ShaderView {
     }
 
     pub fn render_stages(&mut self, display: &dyn Facade) -> Result<()> {
+        let mut texture_with_mipmap_list: Vec<String> = Vec::new();
+        for render_stage in &self.render_chain {
+            for (_, texture_sampling) in render_stage.get_input_map() {
+                if let SampledInput::Mipmaps(texture_name) = texture_sampling {
+                    texture_with_mipmap_list.push(texture_name.to_owned());
+                }
+            }
+        }
+        for (_, texture_sampling) in self.final_stage.get_input_map() {
+            if let SampledInput::Mipmaps(texture_name) = texture_sampling {
+                texture_with_mipmap_list.push(texture_name.to_owned());
+            }
+        }
+
         for (stage_index, stage) in self.render_chain.iter().enumerate() {
             if let Some((render_target_pack, _)) = self.render_buffer_list.get(stage_index) {
                 let render_target = &render_target_pack[1];
@@ -273,8 +300,10 @@ impl ShaderView {
                 let tmp_buffer = render_target_pack.remove(0);
                 render_target_pack.push(tmp_buffer);
 
-                unsafe {
-                    render_target_pack[0].generate_mipmaps();
+                if texture_with_mipmap_list.contains(stage.get_name()) {
+                    unsafe {
+                        render_target_pack[0].generate_mipmaps();
+                    }
                 }
             }
         }
