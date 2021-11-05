@@ -17,8 +17,11 @@ use glium::uniforms::MagnifySamplerFilter;
 use glium::Frame;
 use glium::{backend::Facade, uniforms::MinifySamplerFilter};
 
-use wvr_data::config::project_config::{FilterConfig, RenderStageConfig, SampledInput, ViewConfig};
-use wvr_data::InputProvider;
+use wvr_data::config::filter::FilterConfig;
+use wvr_data::config::project::ViewConfig;
+use wvr_data::config::rendering::RenderStageConfig;
+use wvr_data::types::DataHolder;
+use wvr_data::types::{InputProvider, InputSampler};
 
 pub mod filter;
 pub mod stage;
@@ -187,6 +190,7 @@ impl ShaderView {
     pub fn update(
         &mut self,
         display: &dyn Facade,
+        env_variable_list: &HashMap<String, DataHolder>,
         uniform_sources: &mut HashMap<String, Box<dyn InputProvider>>,
         time: f64,
         beat: f64,
@@ -194,21 +198,21 @@ impl ShaderView {
     ) -> Result<()> {
         let mut texture_with_mipmap_list: Vec<String> = Vec::new();
         for render_stage in &self.render_chain {
-            for (_, texture_sampling) in render_stage.get_input_map() {
-                if let SampledInput::Mipmaps(texture_name) = texture_sampling {
+            for texture_sampling in render_stage.get_input_map().values() {
+                if let InputSampler::Mipmaps(texture_name) = texture_sampling {
                     texture_with_mipmap_list.push(texture_name.to_owned());
                 }
             }
         }
-        for (_, texture_sampling) in self.final_stage.get_input_map() {
-            if let SampledInput::Mipmaps(texture_name) = texture_sampling {
+        for texture_sampling in self.final_stage.get_input_map().values() {
+            if let InputSampler::Mipmaps(texture_name) = texture_sampling {
                 texture_with_mipmap_list.push(texture_name.to_owned());
             }
         }
 
         for (input_name, source) in uniform_sources.iter_mut() {
             for source_id in &source.provides() {
-                if let Some(ref value) = source.get(&source_id, true) {
+                if let Some(ref value) = source.get(source_id, true) {
                     let source_id = if source_id.is_empty() {
                         input_name.clone()
                     } else {
@@ -266,7 +270,7 @@ impl ShaderView {
                 stage.recreate_buffers = false;
             }
 
-            stage.set_beat(display, beat)?;
+            stage.update(display, env_variable_list, beat)?;
         }
 
         Ok(())
@@ -275,14 +279,14 @@ impl ShaderView {
     pub fn render_stages(&mut self, display: &dyn Facade) -> Result<()> {
         let mut texture_with_mipmap_list: Vec<String> = Vec::new();
         for render_stage in &self.render_chain {
-            for (_, texture_sampling) in render_stage.get_input_map() {
-                if let SampledInput::Mipmaps(texture_name) = texture_sampling {
+            for texture_sampling in render_stage.get_input_map().values() {
+                if let InputSampler::Mipmaps(texture_name) = texture_sampling {
                     texture_with_mipmap_list.push(texture_name.to_owned());
                 }
             }
         }
-        for (_, texture_sampling) in self.final_stage.get_input_map() {
-            if let SampledInput::Mipmaps(texture_name) = texture_sampling {
+        for texture_sampling in self.final_stage.get_input_map().values() {
+            if let InputSampler::Mipmaps(texture_name) = texture_sampling {
                 texture_with_mipmap_list.push(texture_name.to_owned());
             }
         }
@@ -336,17 +340,17 @@ impl ShaderView {
 
         for (uniform_name, input_name) in stage.get_input_map() {
             let (input_name, down_sampling, up_sampling) = match input_name {
-                SampledInput::Nearest(input_name) => (
+                InputSampler::Nearest(input_name) => (
                     input_name,
                     MinifySamplerFilter::Nearest,
                     MagnifySamplerFilter::Nearest,
                 ),
-                SampledInput::Linear(input_name) => (
+                InputSampler::Linear(input_name) => (
                     input_name,
                     MinifySamplerFilter::Linear,
                     MagnifySamplerFilter::Linear,
                 ),
-                SampledInput::Mipmaps(input_name) => (
+                InputSampler::Mipmaps(input_name) => (
                     input_name,
                     MinifySamplerFilter::LinearMipmapLinear,
                     MagnifySamplerFilter::Linear,
@@ -391,6 +395,14 @@ impl ShaderView {
         }
 
         Ok(())
+    }
+
+    pub fn stage_index_list(&self) -> HashMap<String, usize> {
+        self.render_chain
+            .iter()
+            .enumerate()
+            .map(|(index, stage)| (stage.get_name().clone(), index))
+            .collect()
     }
 
     pub fn get_dynamic_resolution(&self) -> bool {

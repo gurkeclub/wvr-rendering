@@ -22,7 +22,7 @@ use glium::Program;
 use glium::Surface;
 use glium::VertexBuffer;
 
-use wvr_data::config::project_config::{FilterConfig, FilterMode};
+use wvr_data::config::filter::{FilterConfig, FilterMode};
 use wvr_data::shader::Shader;
 use wvr_data::shader::{FileShader, ShaderComposer};
 
@@ -67,6 +67,10 @@ impl<'hihi> Uniforms for CustomUniforms<'hihi> {
         }
 
         for (uniform_name, texture_sampler) in self.texture_list.iter() {
+            output(uniform_name, texture_sampler.as_uniform_value());
+        }
+
+        for (uniform_name, texture_sampler) in self.srgb_texture_list.iter() {
             output(uniform_name, texture_sampler.as_uniform_value());
         }
 

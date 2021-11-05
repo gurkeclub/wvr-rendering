@@ -8,7 +8,7 @@ use glium::texture::SrgbTexture2d;
 use glium::texture::Texture2d;
 use glium::texture::{DepthTexture2d, MipmapsOption};
 
-use wvr_data::DataHolder;
+use wvr_data::types::DataHolder;
 
 pub enum UniformHolder {
     Buffer((DepthTexture2d, usize)),
